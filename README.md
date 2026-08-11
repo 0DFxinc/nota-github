@@ -111,6 +111,43 @@ jobs:
 The manual run uses the latest valid deployment evidence selected by Nota; it
 does not accept a caller-supplied target URL or commit override.
 
+## Required deployment attestation
+
+Before enabling execution, the approved CD App must create a GitHub Deployment
+for the exact repository, commit SHA, and environment. Its deployment payload
+must include a stable `artifact_id` of 1–255 characters using only letters,
+digits, `.`, `_`, `:`, or `-`. Its successful Deployment Status must set the
+deployed HTTPS origin as `environment_url`.
+
+That origin must serve `/.well-known/nota-deployment.json` as `application/json`
+without a redirect:
+
+```json
+{
+  "repository_id": "123456789",
+  "deployment_id": "987654321",
+  "deployed_sha": "0123456789abcdef0123456789abcdef01234567",
+  "artifact_id": "preview-build-0123456789abcdef"
+}
+```
+
+The two numeric IDs and full 40-character SHA must match GitHub's Deployment
+and the gate. `artifact_id` must exactly match the immutable value in the
+Deployment payload. Nota fetches at most 32 KiB, rejects redirects and private
+or special-use network addresses, and rechecks the marker before browser
+launch. V1 also requires every browser dependency to be served from that same
+origin.
+
+The deployed origin must also be authorized by the Nota target policy. Use an
+exact origin for shared preview hosts such as `*.vercel.app`, `*.netlify.app`,
+or `*.pages.dev`; Nota does not allow broad suffix authorization for shared
+hosting domains. A suffix rule is appropriate only for a customer-controlled
+domain.
+
+Do not let a PR-controlled workflow mint this evidence. Nota enables execution
+only after an administrator binds the policy to the dedicated CD App that owns
+the Deployment and status.
+
 ## Nota setup and rollout
 
 Nota's GitHub App must already be installed and an administrator must create
