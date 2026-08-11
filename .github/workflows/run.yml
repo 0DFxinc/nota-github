@@ -1,0 +1,173 @@
+name: Nota test gate
+
+on:
+  workflow_call:
+    inputs:
+      policy-id:
+        description: Nota GitHub trigger policy UUID
+        required: true
+        type: string
+      operation:
+        description: JOIN_GATE for PR/push; DISPATCH_MANUAL for workflow_dispatch
+        required: false
+        default: JOIN_GATE
+        type: string
+      nota-environment:
+        description: production or development Nota control plane
+        required: false
+        default: production
+        type: string
+      github-environment:
+        description: Protected GitHub environment bound in the Nota policy
+        required: true
+        type: string
+      timeout-seconds:
+        description: Maximum time to wait for an authoritative result
+        required: false
+        default: 3600
+        type: number
+    outputs:
+      gate-attempt-id:
+        description: Durable Nota gate attempt
+        value: ${{ jobs.nota-gate.outputs.gate-attempt-id }}
+      conclusion:
+        description: Authoritative Nota conclusion
+        value: ${{ jobs.nota-gate.outputs.conclusion }}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  nota-gate:
+    name: Nota test gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 270
+    environment: ${{ inputs.github-environment }}
+    outputs:
+      gate-attempt-id: ${{ steps.wait.outputs.gate-attempt-id }}
+      conclusion: ${{ steps.wait.outputs.conclusion }}
+    steps:
+      - id: wait
+        name: Wait for Nota's authoritative result
+        shell: bash
+        env:
+          POLICY_ID: ${{ inputs.policy-id }}
+          OPERATION: ${{ inputs.operation }}
+          NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
+          TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+        run: |
+          set -euo pipefail
+          case "$NOTA_ENVIRONMENT" in
+            production) API_URL="https://app.trynota.ai/api/ci/v1/github/runs" ;;
+            development) API_URL="https://dev.trynota.ai/api/ci/v1/github/runs" ;;
+            *) echo "nota-environment must be production or development" >&2; exit 2 ;;
+          esac
+          case "$OPERATION" in
+            JOIN_GATE|DISPATCH_MANUAL) ;;
+            *) echo "operation must be JOIN_GATE or DISPATCH_MANUAL" >&2; exit 2 ;;
+          esac
+          if ! [[ "$POLICY_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "policy-id must be a UUID" >&2
+            exit 2
+          fi
+          if ! [[ "$TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] ||
+             (( TIMEOUT_SECONDS < 60 || TIMEOUT_SECONDS > 14400 )); then
+            echo "timeout-seconds must be an integer between 60 and 14400" >&2
+            exit 2
+          fi
+          deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
+          admission_deadline=$(( $(date +%s) + 300 ))
+          if (( admission_deadline > deadline )); then
+            admission_deadline=$deadline
+          fi
+          payload=$(jq -nc \
+            --arg operation "$OPERATION" \
+            --arg policyId "$POLICY_ID" \
+            --arg jobName "Nota test gate" \
+            '{operation:$operation,policyId:$policyId,jobName:$jobName}')
+
+          response_file="$RUNNER_TEMP/nota-gate-response.json"
+          OIDC_TOKEN=""
+          OIDC_REFRESH_AT=0
+          refresh_oidc_token() {
+            now=$(date +%s)
+            if [[ -n "$OIDC_TOKEN" && "$now" -lt "$OIDC_REFRESH_AT" ]]; then
+              return
+            fi
+            OIDC_TOKEN=$(curl --fail --silent --show-error \
+              --retry 2 --retry-connrefused --max-time 15 \
+              -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$(printf '%s' "$API_URL" | jq -sRr @uri)" \
+              | jq -er '.value')
+            OIDC_REFRESH_AT=$(( now + 240 ))
+          }
+
+          gate_id=""
+          admission_sleep=10
+          while [[ -z "$gate_id" ]]; do
+            refresh_oidc_token
+            http_status=$(curl --silent --show-error \
+              --retry 2 --retry-connrefused --max-time 20 \
+              -o "$response_file" -w '%{http_code}' \
+              -H "Authorization: Bearer $OIDC_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data-binary "$payload" \
+              "$API_URL")
+            if [[ "$http_status" == "202" ]]; then
+              gate_id=$(jq -er '.gateAttemptId' "$response_file")
+              break
+            fi
+            if [[ "$http_status" == "425" && "$OPERATION" == "JOIN_GATE" &&
+                  $(date +%s) -lt admission_deadline ]]; then
+              echo "Nota is waiting for the GitHub App webhook; retrying admission."
+              sleep "$admission_sleep"
+              if (( admission_sleep < 60 )); then
+                admission_sleep=$(( admission_sleep * 2 ))
+                if (( admission_sleep > 60 )); then admission_sleep=60; fi
+              fi
+              continue
+            fi
+            error=$(jq -r '.error // "unexpected_response"' "$response_file" 2>/dev/null || true)
+            echo "Nota admission failed with HTTP $http_status ($error)." >&2
+            exit 1
+          done
+
+          while true; do
+            refresh_oidc_token
+            http_status=$(curl --silent --show-error \
+              --retry 2 --retry-connrefused --max-time 20 \
+              -o "$response_file" -w '%{http_code}' \
+              -H "Authorization: Bearer $OIDC_TOKEN" \
+              "$API_URL?gate_attempt_id=$gate_id")
+            if [[ "$http_status" != "200" ]]; then
+              error=$(jq -r '.error // "unexpected_response"' "$response_file" 2>/dev/null || true)
+              echo "Nota poll failed with HTTP $http_status ($error)." >&2
+              exit 1
+            fi
+            state=$(jq -er '.state' "$response_file")
+            echo "Nota gate $gate_id: $state"
+            if [[ "$(jq -r '.terminal' "$response_file")" == "true" ]]; then
+              conclusion=$(jq -er '.conclusion' "$response_file")
+              summary=$(jq -r '.summary // "Nota gate completed."' "$response_file")
+              echo "gate-attempt-id=$gate_id" >> "$GITHUB_OUTPUT"
+              echo "conclusion=$conclusion" >> "$GITHUB_OUTPUT"
+              echo "### Nota test gate" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "**Conclusion:** $conclusion" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "$summary" >> "$GITHUB_STEP_SUMMARY"
+              case "$conclusion" in
+                success) exit 0 ;;
+                failure) echo "Nota found a test failure." >&2; exit 1 ;;
+                action_required) echo "Nota needs operator attention." >&2; exit 1 ;;
+                cancelled) echo "Nota gate was cancelled." >&2; exit 1 ;;
+                *) echo "Nota returned an unknown conclusion." >&2; exit 2 ;;
+              esac
+            fi
+            if (( $(date +%s) >= deadline )); then
+              echo "Timed out waiting for Nota gate $gate_id" >&2
+              exit 1
+            fi
+            sleep 30
+          done
