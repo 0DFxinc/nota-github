@@ -70,6 +70,8 @@ test("release manifest matches the public contract and helper lock", () => {
     createHash("sha256").update(lockBytes).digest("hex"),
     manifest.helperLockSha256,
   );
+  assert.match(text("deploy-vercel-and-attest.yml"), new RegExp(manifest.helperLockSha256));
+  assert.match(text("preflight.yml"), new RegExp(manifest.helperLockSha256));
   const lock = JSON.parse(lockBytes);
   assert.equal(lock.packages["node_modules/vercel"].version, manifest.vercel.version);
   assert.equal(lock.packages["node_modules/vercel"].integrity, manifest.vercel.integrity);

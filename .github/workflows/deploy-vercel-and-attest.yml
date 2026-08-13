@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git -C "$GITHUB_WORKSPACE/_nota_helper" rev-parse HEAD)" = "f454b3ada3a37aa7b7d381fed9124fa306183421"
-          test "$(sha256sum "$GITHUB_WORKSPACE/_nota_helper/package-lock.json" | cut -d' ' -f1)" = "db585020108fd6c9b922118684bc2f4bc3ed545e1491c6d0348a39f6e40cb109"
+          test "$(sha256sum "$GITHUB_WORKSPACE/_nota_helper/package-lock.json" | cut -d' ' -f1)" = "7e65a6cacad78ef1836fd13bc2c5b69f9a893b4ad80e3164d89204ede64c0cb8"
           [[ "$POLICY_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo "policy-id must be a UUID" >&2; exit 2; }
           request="$RUNNER_TEMP/nota-preflight-request.json"
           response="$RUNNER_TEMP/nota-preflight-response.json"
