@@ -1,0 +1,51 @@
+import assert from "node:assert/strict";
+import { tmpdir } from "node:os";
+import test from "node:test";
+
+import { NotaApiError } from "../scripts/nota-api.mjs";
+import { uploadVercelWithAttestation } from "../scripts/vercel-upload.mjs";
+
+const attestationId = "22222222-2222-4222-8222-222222222222";
+
+function environment() {
+  return {
+    RUNNER_TEMP: tmpdir(),
+    NOTA_ATTESTATION_ID: attestationId,
+    NOTA_PROVIDER_OPERATION: "DEPLOY",
+  };
+}
+
+test("durably begins the exact provider operation before invoking Vercel", async () => {
+  const order = [];
+  const result = await uploadVercelWithAttestation(environment(), {
+    callNotaApi: async (command, env) => {
+      order.push(`nota:${command}`);
+      assert.equal(command, "attest");
+      assert.match(env.NOTA_REQUEST_FILE, /nota-provider-begin-/);
+      return { attestationId, providerOperation: "DEPLOY" };
+    },
+    deployOrRecover: async () => {
+      order.push("vercel");
+      return { deploymentId: "dpl_12345678" };
+    },
+  });
+
+  assert.deepEqual(order, ["nota:attest", "vercel"]);
+  assert.deepEqual(result, { deploymentId: "dpl_12345678" });
+});
+
+test("never invokes Vercel when the durable begin response is lost", async () => {
+  let providerCalls = 0;
+  await assert.rejects(
+    uploadVercelWithAttestation(environment(), {
+      callNotaApi: async () => {
+        throw new NotaApiError("NOTA_API_UNAVAILABLE");
+      },
+      deployOrRecover: async () => {
+        providerCalls += 1;
+      },
+    }),
+    /NOTA_API_UNAVAILABLE/,
+  );
+  assert.equal(providerCalls, 0);
+});
