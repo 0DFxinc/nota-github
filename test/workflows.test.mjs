@@ -12,7 +12,7 @@ const workflows = [
   "run-static-smoke.yml",
   "run.yml",
 ];
-const helper = "f454b3ada3a37aa7b7d381fed9124fa306183421";
+const helper = "307e876a533ab17c4590f2bb73c0a9dbbb3a6133";
 const sha = /^[0-9a-f]{40}$/;
 
 function text(name) {
@@ -44,10 +44,11 @@ test("Vercel workflow preserves the approved trust and materialization order", (
   const prepare = source.indexOf("Allocate or recover Nota App deployment");
   const checkout = source.indexOf("Check out the server-resolved PR source");
   const marker = source.indexOf("Materialize marker in sanitized upload tree");
-  const begin = source.indexOf("Record provider request start");
-  const deploy = source.indexOf("Deploy or recover exact Vercel preview");
+  const deploy = source.indexOf("Begin and deploy or recover exact Vercel preview");
   const finalize = source.indexOf("Finalize App-owned deployment proof");
-  assert.ok(prepare < checkout && checkout < marker && marker < begin && begin < deploy && deploy < finalize);
+  assert.ok(prepare < checkout && checkout < marker && marker < deploy && deploy < finalize);
+  assert.match(source, /cancel-in-progress: false/);
+  assert.doesNotMatch(source, /Record provider request start/);
   assert.doesNotMatch(source, /--prod|promote|alias|--env|--build-env/);
 });
 

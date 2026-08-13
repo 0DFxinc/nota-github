@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: 0DFxinc/nota-github
-          ref: f454b3ada3a37aa7b7d381fed9124fa306183421
+          ref: 307e876a533ab17c4590f2bb73c0a9dbbb3a6133
           path: _nota_helper
           persist-credentials: false
       - name: Verify helper and preflight authority
@@ -54,7 +54,7 @@ jobs:
           NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
         run: |
           set -euo pipefail
-          test "$(git -C "$GITHUB_WORKSPACE/_nota_helper" rev-parse HEAD)" = "f454b3ada3a37aa7b7d381fed9124fa306183421"
+          test "$(git -C "$GITHUB_WORKSPACE/_nota_helper" rev-parse HEAD)" = "307e876a533ab17c4590f2bb73c0a9dbbb3a6133"
           test "$(sha256sum "$GITHUB_WORKSPACE/_nota_helper/package-lock.json" | cut -d' ' -f1)" = "7e65a6cacad78ef1836fd13bc2c5b69f9a893b4ad80e3164d89204ede64c0cb8"
           [[ "$POLICY_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo "policy-id must be a UUID" >&2; exit 2; }
           request="$RUNNER_TEMP/nota-preflight-request.json"
@@ -71,7 +71,7 @@ jobs:
     timeout-minutes: 45
     concurrency:
       group: nota-attestation-${{ github.repository_id }}-${{ inputs.policy-id }}-${{ github.event.pull_request.number || github.run_id }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     environment:
       name: ${{ inputs.github-environment }}
       deployment: false
@@ -83,7 +83,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: 0DFxinc/nota-github
-          ref: f454b3ada3a37aa7b7d381fed9124fa306183421
+          ref: 307e876a533ab17c4590f2bb73c0a9dbbb3a6133
           path: _nota_helper
           persist-credentials: false
       - name: Set up pinned Node runtime
@@ -100,8 +100,8 @@ jobs:
           NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
         run: |
           set -euo pipefail
-          test "$(git -C "$GITHUB_WORKSPACE/_nota_helper" rev-parse HEAD)" = "f454b3ada3a37aa7b7d381fed9124fa306183421"
-          test "$(sha256sum "$GITHUB_WORKSPACE/_nota_helper/package-lock.json" | cut -d' ' -f1)" = "db585020108fd6c9b922118684bc2f4bc3ed545e1491c6d0348a39f6e40cb109"
+          test "$(git -C "$GITHUB_WORKSPACE/_nota_helper" rev-parse HEAD)" = "307e876a533ab17c4590f2bb73c0a9dbbb3a6133"
+          test "$(sha256sum "$GITHUB_WORKSPACE/_nota_helper/package-lock.json" | cut -d' ' -f1)" = "7e65a6cacad78ef1836fd13bc2c5b69f9a893b4ad80e3164d89204ede64c0cb8"
           npm --prefix "$GITHUB_WORKSPACE/_nota_helper" ci --ignore-scripts --no-audit --no-fund
       - name: Revalidate authority before token use
         id: authority
@@ -176,25 +176,12 @@ jobs:
           NOTA_MARKER_BASE64: ${{ steps.prepare.outputs.markerBase64 }}
           NOTA_MARKER_SHA256: ${{ steps.prepare.outputs.markerSha256 }}
         run: node "$GITHUB_WORKSPACE/_nota_helper/scripts/stage-upload.mjs" >/dev/null
-      - name: Record provider request start
-        id: begin
-        shell: bash
-        env:
-          ATTESTATION_ID: ${{ steps.prepare.outputs.attestationId }}
-          EXPECTED_OPERATION: ${{ steps.prepare.outputs.providerOperation }}
-          NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
-        run: |
-          set -euo pipefail
-          request="$RUNNER_TEMP/nota-begin-request.json"
-          response="$RUNNER_TEMP/nota-begin-response.json"
-          jq -nc --arg id "$ATTESTATION_ID" --arg providerOperation "$EXPECTED_OPERATION" \
-            '{operation:"BEGIN_VERCEL_UPLOAD",attestationId:$id,providerOperation:$providerOperation}' > "$request"
-          NOTA_REQUEST_FILE="$request" node "$GITHUB_WORKSPACE/_nota_helper/scripts/nota-api.mjs" attest > "$response"
-          jq -e --arg expected "$EXPECTED_OPERATION" '.providerOperation == $expected' "$response" >/dev/null
-      - name: Deploy or recover exact Vercel preview
+      - name: Begin and deploy or recover exact Vercel preview
         id: provider
         shell: bash
         env:
+          NOTA_ATTESTATION_ID: ${{ steps.prepare.outputs.attestationId }}
+          NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROJECT_ID: ${{ steps.authority.outputs.project-id }}
           VERCEL_ORG_ID: ${{ steps.authority.outputs.team-id }}
@@ -203,7 +190,7 @@ jobs:
           NOTA_RECOVERY_KEY: ${{ steps.prepare.outputs.recoveryKey }}
           NOTA_PROVIDER_OPERATION: ${{ steps.prepare.outputs.providerOperation }}
           NOTA_PROVIDER_TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
-        run: node "$GITHUB_WORKSPACE/_nota_helper/scripts/vercel-provider.mjs" > "$RUNNER_TEMP/nota-provider-receipt.json"
+        run: node "$GITHUB_WORKSPACE/_nota_helper/scripts/vercel-upload.mjs" > "$RUNNER_TEMP/nota-provider-receipt.json"
       - name: Finalize App-owned deployment proof
         id: finalize
         shell: bash

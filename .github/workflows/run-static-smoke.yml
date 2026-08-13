@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   smoke:
-    name: Nota static smoke
+    name: Nota static smoke / ${{ github.sha }}
     runs-on: ubuntu-latest
     timeout-minutes: 270
     steps:
@@ -32,13 +32,14 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: 0DFxinc/nota-github
-          ref: f454b3ada3a37aa7b7d381fed9124fa306183421
+          ref: 307e876a533ab17c4590f2bb73c0a9dbbb3a6133
           path: _nota_helper
           persist-credentials: false
       - name: Run informational static smoke
         shell: bash
         env:
           POLICY_ID: ${{ inputs.policy-id }}
+          JOB_NAME: Nota static smoke / ${{ github.sha }}
           NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
           TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
         run: |
@@ -48,7 +49,8 @@ jobs:
           deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
           request="$RUNNER_TEMP/nota-smoke-request.json"
           response="$RUNNER_TEMP/nota-smoke-response.json"
-          jq -nc --arg policyId "$POLICY_ID" '{operation:"JOIN_STATIC_SMOKE",policyId:$policyId,jobName:"Nota static smoke"}' > "$request"
+          jq -nc --arg policyId "$POLICY_ID" --arg jobName "$JOB_NAME" \
+            '{operation:"JOIN_STATIC_SMOKE",policyId:$policyId,jobName:$jobName}' > "$request"
           NOTA_REQUEST_FILE="$request" node "$GITHUB_WORKSPACE/_nota_helper/scripts/nota-api.mjs" smoke > "$response"
           attempt_id=$(jq -er '.gateAttemptId | select(test("^[0-9a-f-]{36}$"))' "$response")
           while true; do
