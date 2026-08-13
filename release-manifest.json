@@ -1,0 +1,15 @@
+{
+  "protocolVersion": 1,
+  "helperCommit": "f454b3ada3a37aa7b7d381fed9124fa306183421",
+  "helperTree": "ef6d19f7525bf0f83071b21d2f2804c912a52deb",
+  "helperLockSha256": "7e65a6cacad78ef1836fd13bc2c5b69f9a893b4ad80e3164d89204ede64c0cb8",
+  "contractSha256": "f6af5dd74c7f6fd4afd889c329c40e9afe57486a0a189ccff3cb410c10086434",
+  "vercel": {
+    "version": "58.11.0",
+    "integrity": "sha512-DDn+i+KlwkS8pM4fa8r0CvoE6o4IKMdnlPikQhtx7I6Kstu6itD1TlxLopKRxrP2QoCjeCt7u1E2X9ORmfZYLw=="
+  },
+  "actions": {
+    "checkout": "11bd71901bbe5b1630ceea73d27597364c9af683",
+    "setupNode": "49933ea5288caeca8642d1e84afbd3f7d6820020"
+  }
+}

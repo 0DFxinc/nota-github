@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/0DFxinc/nota-github/contracts/github-ci-attestation-v1.json",
+  "title": "Nota GitHub CI target binding v1",
+  "$ref": "#/$defs/ci_dispatch_target_binding",
+  "$defs": {
+    "decimal_id": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "full_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "origin": {
+      "type": "string",
+      "pattern": "^https://[^/?#]+$",
+      "maxLength": 512
+    },
+    "addresses": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "maxLength": 64
+      }
+    },
+    "marker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_id",
+        "deployment_id",
+        "deployed_sha",
+        "artifact_id"
+      ],
+      "properties": {
+        "repository_id": {
+          "$ref": "#/$defs/decimal_id"
+        },
+        "deployment_id": {
+          "$ref": "#/$defs/decimal_id"
+        },
+        "deployed_sha": {
+          "$ref": "#/$defs/full_sha"
+        },
+        "artifact_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:-]{1,255}$"
+        }
+      }
+    },
+    "proof_mode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "deploymentCreatorAppId",
+        "statusCreatorAppId"
+      ],
+      "properties": {
+        "kind": {
+          "enum": ["DEDICATED_CD_APP", "TRUSTED_WORKFLOW"]
+        },
+        "deploymentCreatorAppId": {
+          "$ref": "#/$defs/decimal_id"
+        },
+        "statusCreatorAppId": {
+          "$ref": "#/$defs/decimal_id"
+        }
+      }
+    },
+    "vercel_provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "projectId", "teamId", "deploymentId"],
+      "properties": {
+        "kind": {
+          "const": "VERCEL_PROJECT"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^prj_[A-Za-z0-9]{8,128}$"
+        },
+        "teamId": {
+          "type": "string",
+          "pattern": "^team_[A-Za-z0-9]{8,128}$"
+        },
+        "deploymentId": {
+          "type": "string",
+          "pattern": "^dpl_[A-Za-z0-9]{8,160}$"
+        }
+      }
+    },
+    "deployment_target_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocolVersion",
+        "repositoryId",
+        "deploymentId",
+        "deploymentStatusId",
+        "deployedSha",
+        "environment",
+        "canonicalUrl",
+        "artifactId",
+        "proofMode",
+        "markerHash",
+        "resolvedAddresses",
+        "policyGeneration",
+        "connectionGeneration",
+        "egressQualificationVersion",
+        "credentialEnvironmentId",
+        "validatedAt"
+      ],
+      "properties": {
+        "protocolVersion": {
+          "const": 1
+        },
+        "repositoryId": {
+          "$ref": "#/$defs/decimal_id"
+        },
+        "deploymentId": {
+          "$ref": "#/$defs/decimal_id"
+        },
+        "deploymentStatusId": {
+          "$ref": "#/$defs/decimal_id"
+        },
+        "deployedSha": {
+          "$ref": "#/$defs/full_sha"
+        },
+        "environment": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "canonicalUrl": {
+          "$ref": "#/$defs/origin"
+        },
+        "artifactId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:-]{1,255}$"
+        },
+        "proofMode": {
+          "$ref": "#/$defs/proof_mode"
+        },
+        "trustedWorkflow": {
+          "type": "object"
+        },
+        "markerHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "resolvedAddresses": {
+          "$ref": "#/$defs/addresses"
+        },
+        "policyId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "policyGeneration": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "connectionGeneration": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "egressQualificationVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "credentialEnvironmentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "validatedAt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "attestationId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "provider": {
+          "$ref": "#/$defs/vercel_provider"
+        }
+      }
+    },
+    "static_smoke_target_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "protocolVersion",
+        "canonicalUrl",
+        "resolvedAddresses",
+        "policyId",
+        "policyGeneration",
+        "connectionGeneration",
+        "egressQualificationVersion",
+        "credentialFree",
+        "validatedAt"
+      ],
+      "properties": {
+        "kind": {
+          "const": "STATIC_SMOKE_V1"
+        },
+        "protocolVersion": {
+          "const": 1
+        },
+        "canonicalUrl": {
+          "$ref": "#/$defs/origin"
+        },
+        "resolvedAddresses": {
+          "$ref": "#/$defs/addresses"
+        },
+        "policyId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "policyGeneration": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "connectionGeneration": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "egressQualificationVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "credentialFree": {
+          "const": true
+        },
+        "validatedAt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    },
+    "deployment_target_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["networkMode", "allowedOrigins", "allowedHostSuffixes", "markerPath"],
+      "properties": {
+        "networkMode": {
+          "const": "SAME_ORIGIN"
+        },
+        "allowedOrigins": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/origin"
+          }
+        },
+        "allowedHostSuffixes": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^\\.[a-z0-9.-]+$"
+          }
+        },
+        "markerPath": {
+          "const": "/.well-known/nota-deployment.json"
+        }
+      }
+    },
+    "static_smoke_target_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["networkMode", "allowedOrigins", "allowedHostSuffixes"],
+      "properties": {
+        "networkMode": {
+          "const": "SAME_ORIGIN"
+        },
+        "allowedOrigins": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "$ref": "#/$defs/origin"
+          }
+        },
+        "allowedHostSuffixes": {
+          "type": "array",
+          "maxItems": 0
+        }
+      }
+    },
+    "ci_dispatch_target_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetSnapshot", "targetPolicy"],
+      "oneOf": [
+        {
+          "properties": {
+            "targetSnapshot": {
+              "$ref": "#/$defs/deployment_target_snapshot"
+            },
+            "targetPolicy": {
+              "$ref": "#/$defs/deployment_target_policy"
+            }
+          }
+        },
+        {
+          "properties": {
+            "targetSnapshot": {
+              "$ref": "#/$defs/static_smoke_target_snapshot"
+            },
+            "targetPolicy": {
+              "$ref": "#/$defs/static_smoke_target_policy"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

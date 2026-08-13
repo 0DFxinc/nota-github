@@ -1,0 +1,67 @@
+name: Nota static URL smoke test
+
+on:
+  workflow_call:
+    inputs:
+      policy-id:
+        description: Informational STATIC_SMOKE policy UUID
+        required: true
+        type: string
+      nota-environment:
+        description: production or development Nota control plane
+        required: false
+        default: production
+        type: string
+      timeout-seconds:
+        description: Maximum time to wait for the smoke suite
+        required: false
+        default: 3600
+        type: number
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  smoke:
+    name: Nota static smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 270
+    steps:
+      - name: Check out reviewed Nota helper
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: 0DFxinc/nota-github
+          ref: f454b3ada3a37aa7b7d381fed9124fa306183421
+          path: _nota_helper
+          persist-credentials: false
+      - name: Run informational static smoke
+        shell: bash
+        env:
+          POLICY_ID: ${{ inputs.policy-id }}
+          NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
+          TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+        run: |
+          set -euo pipefail
+          [[ "$POLICY_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo "policy-id must be a UUID" >&2; exit 2; }
+          [[ "$TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] && (( TIMEOUT_SECONDS >= 60 && TIMEOUT_SECONDS <= 14400 )) || { echo "timeout-seconds must be 60..14400" >&2; exit 2; }
+          deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
+          request="$RUNNER_TEMP/nota-smoke-request.json"
+          response="$RUNNER_TEMP/nota-smoke-response.json"
+          jq -nc --arg policyId "$POLICY_ID" '{operation:"JOIN_STATIC_SMOKE",policyId:$policyId,jobName:"Nota static smoke"}' > "$request"
+          NOTA_REQUEST_FILE="$request" node "$GITHUB_WORKSPACE/_nota_helper/scripts/nota-api.mjs" smoke > "$response"
+          attempt_id=$(jq -er '.gateAttemptId | select(test("^[0-9a-f-]{36}$"))' "$response")
+          while true; do
+            jq -nc --arg id "$attempt_id" '{operation:"POLL_STATIC_SMOKE",gateAttemptId:$id}' > "$request"
+            NOTA_REQUEST_FILE="$request" node "$GITHUB_WORKSPACE/_nota_helper/scripts/nota-api.mjs" smoke > "$response"
+            state=$(jq -er '.state' "$response")
+            echo "Nota static smoke: $state"
+            if [[ "$(jq -r '.terminal' "$response")" == "true" ]]; then
+              conclusion=$(jq -er '.conclusion' "$response")
+              [[ "$conclusion" == "success" ]] && exit 0
+              echo "Nota static smoke concluded: $conclusion" >&2
+              exit 1
+            fi
+            (( $(date +%s) < deadline )) || { echo "Nota static smoke timed out" >&2; exit 1; }
+            sleep 30
+          done

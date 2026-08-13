@@ -1,0 +1,105 @@
+name: Nota deployment attestation preflight
+
+on:
+  workflow_call:
+    inputs:
+      policy-id:
+        description: Nota GitHub trigger policy UUID
+        required: true
+        type: string
+      nota-environment:
+        description: production or development Nota control plane
+        required: false
+        default: production
+        type: string
+      github-environment:
+        description: Reviewer-protected GitHub environment containing only VERCEL_TOKEN
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  authority:
+    name: Validate Nota and GitHub authority
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out reviewed Nota helper
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: 0DFxinc/nota-github
+          ref: f454b3ada3a37aa7b7d381fed9124fa306183421
+          path: _nota_helper
+          persist-credentials: false
+      - name: Verify helper identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C "$GITHUB_WORKSPACE/_nota_helper" rev-parse HEAD)" = "f454b3ada3a37aa7b7d381fed9124fa306183421"
+          test "$(sha256sum "$GITHUB_WORKSPACE/_nota_helper/package-lock.json" | cut -d' ' -f1)" = "db585020108fd6c9b922118684bc2f4bc3ed545e1491c6d0348a39f6e40cb109"
+      - name: Run secret-free authority preflight
+        shell: bash
+        env:
+          POLICY_ID: ${{ inputs.policy-id }}
+          GITHUB_ENVIRONMENT_NAME: ${{ inputs.github-environment }}
+          NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
+        run: |
+          set -euo pipefail
+          [[ "$POLICY_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo "policy-id must be a UUID" >&2; exit 2; }
+          [[ "$GITHUB_ENVIRONMENT_NAME" =~ ^[^[:cntrl:]]{1,255}$ ]] || { echo "github-environment is invalid" >&2; exit 2; }
+          request="$RUNNER_TEMP/nota-preflight-request.json"
+          response="$RUNNER_TEMP/nota-preflight-response.json"
+          jq -nc --arg policyId "$POLICY_ID" --arg environment "$GITHUB_ENVIRONMENT_NAME" \
+            '{operation:"PREFLIGHT_VERCEL",policyId:$policyId,githubEnvironment:$environment,jobName:"Validate Nota and GitHub authority"}' > "$request"
+          NOTA_REQUEST_FILE="$request" node "$GITHUB_WORKSPACE/_nota_helper/scripts/nota-api.mjs" preflight > "$response"
+          jq -e --arg environment "$GITHUB_ENVIRONMENT_NAME" '
+            .ready == true and .githubEnvironment == $environment and
+            (.projectId | test("^prj_[A-Za-z0-9]{8,128}$")) and
+            (.teamId | test("^team_[A-Za-z0-9]{8,128}$")) and
+            (.subjectSha | test("^[0-9a-f]{40}$"))
+          ' "$response" >/dev/null
+
+  provider:
+    name: Validate protected Vercel project
+    needs: authority
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: ${{ inputs.github-environment }}
+      deployment: false
+    steps:
+      - name: Check out reviewed Nota helper
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: 0DFxinc/nota-github
+          ref: f454b3ada3a37aa7b7d381fed9124fa306183421
+          path: _nota_helper
+          persist-credentials: false
+      - name: Revalidate authority before token use
+        shell: bash
+        env:
+          POLICY_ID: ${{ inputs.policy-id }}
+          GITHUB_ENVIRONMENT_NAME: ${{ inputs.github-environment }}
+          NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
+        run: |
+          set -euo pipefail
+          request="$RUNNER_TEMP/nota-preflight-runtime-request.json"
+          response="$RUNNER_TEMP/nota-preflight-runtime-response.json"
+          jq -nc --arg policyId "$POLICY_ID" --arg environment "$GITHUB_ENVIRONMENT_NAME" \
+            '{operation:"PREFLIGHT_VERCEL_RUNTIME",policyId:$policyId,githubEnvironment:$environment,jobName:"Validate protected Vercel project"}' > "$request"
+          NOTA_REQUEST_FILE="$request" node "$GITHUB_WORKSPACE/_nota_helper/scripts/nota-api.mjs" preflight > "$response"
+          jq -e --arg environment "$GITHUB_ENVIRONMENT_NAME" '.ready == true and .githubEnvironment == $environment' "$response" >/dev/null
+          jq -r '.projectId' "$response" > "$RUNNER_TEMP/nota-project-id"
+          jq -r '.teamId' "$response" > "$RUNNER_TEMP/nota-team-id"
+      - name: Validate credential-free Vercel project
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          export VERCEL_PROJECT_ID="$(cat "$RUNNER_TEMP/nota-project-id")"
+          export VERCEL_ORG_ID="$(cat "$RUNNER_TEMP/nota-team-id")"
+          node "$GITHUB_WORKSPACE/_nota_helper/scripts/preflight-vercel.mjs" >/dev/null
