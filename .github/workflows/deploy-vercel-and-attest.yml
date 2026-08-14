@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: 0DFxinc/nota-github
-          ref: 250d4ca7ffb89998cf950ff5e17b7a5058a4a611
+          ref: b2b9b42768619000b4e13f23fa0a44c0a8c6d3ae
           path: _nota_helper
           persist-credentials: false
       - name: Verify helper and preflight authority
@@ -54,7 +54,7 @@ jobs:
           NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
         run: |
           set -euo pipefail
-          test "$(git -C "$GITHUB_WORKSPACE/_nota_helper" rev-parse HEAD)" = "250d4ca7ffb89998cf950ff5e17b7a5058a4a611"
+          test "$(git -C "$GITHUB_WORKSPACE/_nota_helper" rev-parse HEAD)" = "b2b9b42768619000b4e13f23fa0a44c0a8c6d3ae"
           test "$(sha256sum "$GITHUB_WORKSPACE/_nota_helper/package-lock.json" | cut -d' ' -f1)" = "7a964e61a614c1a996087ab2a1b737a17c44433bbcab3bd16f062ae2e5c632ba"
           [[ "$POLICY_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo "policy-id must be a UUID" >&2; exit 2; }
           request="$RUNNER_TEMP/nota-preflight-request.json"
@@ -83,7 +83,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: 0DFxinc/nota-github
-          ref: 250d4ca7ffb89998cf950ff5e17b7a5058a4a611
+          ref: b2b9b42768619000b4e13f23fa0a44c0a8c6d3ae
           path: _nota_helper
           persist-credentials: false
       - name: Set up pinned Node runtime
@@ -100,7 +100,7 @@ jobs:
           NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
         run: |
           set -euo pipefail
-          test "$(git -C "$GITHUB_WORKSPACE/_nota_helper" rev-parse HEAD)" = "250d4ca7ffb89998cf950ff5e17b7a5058a4a611"
+          test "$(git -C "$GITHUB_WORKSPACE/_nota_helper" rev-parse HEAD)" = "b2b9b42768619000b4e13f23fa0a44c0a8c6d3ae"
           test "$(sha256sum "$GITHUB_WORKSPACE/_nota_helper/package-lock.json" | cut -d' ' -f1)" = "7a964e61a614c1a996087ab2a1b737a17c44433bbcab3bd16f062ae2e5c632ba"
           npm --prefix "$GITHUB_WORKSPACE/_nota_helper" ci --ignore-scripts --no-audit --no-fund
       - name: Revalidate authority before token use
