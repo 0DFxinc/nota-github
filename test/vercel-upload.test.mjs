@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import test from "node:test";
 
 import { NotaApiError } from "../scripts/nota-api.mjs";
+import { VercelProviderError } from "../scripts/vercel-provider.mjs";
 import { uploadVercelWithAttestation } from "../scripts/vercel-upload.mjs";
 
 const attestationId = "22222222-2222-4222-8222-222222222222";
@@ -68,4 +70,54 @@ test("rejects deterministic provider inputs before durable begin", async () => {
     /INVALID_TIMEOUT/,
   );
   assert.equal(beginCalls, 0);
+});
+
+test("resets only a provider child that definitely never spawned", async () => {
+  const operations = [];
+  await assert.rejects(
+    uploadVercelWithAttestation(environment(), {
+      prepareVercelOperation: () => ({ operation: "DEPLOY" }),
+      callNotaApi: async (_command, env, _fetchImpl, options) => {
+        const request = JSON.parse(readFileSync(env.NOTA_REQUEST_FILE, "utf8"));
+        operations.push(request.operation);
+        assert.deepEqual(options, { retryIdenticalPostOnce: true });
+        if (request.operation === "BEGIN_VERCEL_UPLOAD") {
+          return { attestationId, providerOperation: "DEPLOY" };
+        }
+        assert.deepEqual(request, {
+          operation: "ABORT_VERCEL_UPLOAD",
+          attestationId,
+          reason: "PROVIDER_DEFINITELY_NOT_SENT",
+        });
+        return { attestationId, providerOperation: "DEPLOY", reset: true };
+      },
+      executePreparedVercelOperation: async () => {
+        throw new VercelProviderError("PROVIDER_DEFINITELY_NOT_SENT");
+      },
+    }),
+    /PROVIDER_DEFINITELY_NOT_SENT/,
+  );
+  assert.deepEqual(operations, [
+    "BEGIN_VERCEL_UPLOAD",
+    "ABORT_VERCEL_UPLOAD",
+  ]);
+});
+
+test("never resets an ambiguous mutation after the provider child spawned", async () => {
+  const operations = [];
+  await assert.rejects(
+    uploadVercelWithAttestation(environment(), {
+      prepareVercelOperation: () => ({ operation: "DEPLOY" }),
+      callNotaApi: async (_command, env) => {
+        const request = JSON.parse(readFileSync(env.NOTA_REQUEST_FILE, "utf8"));
+        operations.push(request.operation);
+        return { attestationId, providerOperation: "DEPLOY" };
+      },
+      executePreparedVercelOperation: async () => {
+        throw new VercelProviderError("PROVIDER_MUTATION_UNCERTAIN");
+      },
+    }),
+    /PROVIDER_MUTATION_UNCERTAIN/,
+  );
+  assert.deepEqual(operations, ["BEGIN_VERCEL_UPLOAD"]);
 });

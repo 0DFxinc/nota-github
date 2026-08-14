@@ -63,6 +63,47 @@ async function beginProvider(env, callApi) {
   }
 }
 
+async function abortDefinitelyNotSent(env, callApi) {
+  if (!env.RUNNER_TEMP?.startsWith("/")) fail("INVALID_RUNNER_TEMP");
+  if (!UUID.test(env.NOTA_ATTESTATION_ID ?? "")) fail("INVALID_ATTESTATION_ID");
+  const directory = mkdtempSync(join(env.RUNNER_TEMP, "nota-provider-abort-"));
+  const requestFile = join(directory, "request.json");
+  try {
+    writeFileSync(
+      requestFile,
+      `${JSON.stringify({
+        operation: "ABORT_VERCEL_UPLOAD",
+        attestationId: env.NOTA_ATTESTATION_ID,
+        reason: "PROVIDER_DEFINITELY_NOT_SENT",
+      })}\n`,
+      { encoding: "utf8", mode: 0o600 },
+    );
+    const response = await callApi(
+      "attest",
+      {
+        ...env,
+        NOTA_REQUEST_FILE: requestFile,
+      },
+      undefined,
+      { retryIdenticalPostOnce: true },
+    );
+    if (
+      response.attestationId !== env.NOTA_ATTESTATION_ID ||
+      response.providerOperation !== "DEPLOY" ||
+      response.reset !== true
+    ) {
+      fail("NOTA_ABORT_RESPONSE_MISMATCH");
+    }
+  } finally {
+    try {
+      unlinkSync(requestFile);
+    } catch {}
+    try {
+      rmdirSync(directory);
+    } catch {}
+  }
+}
+
 export async function uploadVercelWithAttestation(
   env = process.env,
   dependencies = {},
@@ -72,11 +113,22 @@ export async function uploadVercelWithAttestation(
   const prepared = (
     dependencies.prepareVercelOperation ?? prepareVercelOperation
   )(env, dependencies.providerDependencies);
-  await beginProvider(env, dependencies.callNotaApi ?? callNotaApi);
-  return (
-    dependencies.executePreparedVercelOperation ??
-    executePreparedVercelOperation
-  )(prepared);
+  const callApi = dependencies.callNotaApi ?? callNotaApi;
+  await beginProvider(env, callApi);
+  try {
+    return await (
+      dependencies.executePreparedVercelOperation ??
+      executePreparedVercelOperation
+    )(prepared);
+  } catch (error) {
+    if (
+      error instanceof VercelProviderError &&
+      error.code === "PROVIDER_DEFINITELY_NOT_SENT"
+    ) {
+      await abortDefinitelyNotSent(env, callApi);
+    }
+    throw error;
+  }
 }
 
 async function main() {
