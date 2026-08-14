@@ -60,7 +60,7 @@ Deployment, status, policy, suite, environment, or Vercel mutation:
 ```yaml
 jobs:
   validate:
-    uses: 0DFxinc/nota-github/.github/workflows/preflight.yml@d5b1a40433986bc9d07062d650049f909c0a47d1
+    uses: 0DFxinc/nota-github/.github/workflows/preflight.yml@5d77b34ec276a4a0c15820c341f788d81aef5bf1
     with:
       policy-id: 00000000-0000-4000-8000-000000000000
       nota-environment: development

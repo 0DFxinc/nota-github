@@ -108,7 +108,7 @@ test("public contract uses the exact cross-repository wire names", () => {
 });
 
 test("runnable examples pin the immutable workflow release and never inherit secrets", () => {
-  const release = "d5b1a40433986bc9d07062d650049f909c0a47d1";
+  const release = "5d77b34ec276a4a0c15820c341f788d81aef5bf1";
   for (const name of ["static-smoke.yml", "vercel-preview.yml"]) {
     const source = readFileSync(join(root, "examples", name), "utf8");
     assert.equal(typeof parse(source), "object");
