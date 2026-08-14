@@ -254,7 +254,7 @@ function runCli(executable, args, options) {
   });
 }
 
-export async function deployOrRecover(env = process.env, dependencies = {}) {
+export function prepareVercelOperation(env = process.env, dependencies = {}) {
   const operation = env.NOTA_PROVIDER_OPERATION;
   if (operation !== "DEPLOY" && operation !== "RECOVER") {
     fail("INVALID_PROVIDER_OPERATION");
@@ -278,14 +278,10 @@ export async function deployOrRecover(env = process.env, dependencies = {}) {
     fetchImpl: dependencies.fetchImpl ?? fetch,
     candidateOrigin: null,
   };
-  if (operation === "RECOVER") return recoverDeployment(settings);
-
-  const timeout = boundedInteger(
-    env.NOTA_PROVIDER_TIMEOUT_SECONDS,
-    900,
-    60,
-    1_800,
-  );
+  const timeout =
+    operation === "DEPLOY"
+      ? boundedInteger(env.NOTA_PROVIDER_TIMEOUT_SECONDS, 900, 60, 1_800)
+      : null;
   const minimalEnv = {
     HOME: env.RUNNER_TEMP,
     PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
@@ -296,8 +292,23 @@ export async function deployOrRecover(env = process.env, dependencies = {}) {
     VERCEL_PROJECT_ID: settings.projectId,
   };
   if (!minimalEnv.HOME || !isAbsolute(minimalEnv.HOME)) fail("INVALID_RUNNER_TEMP");
-  const result = await (dependencies.runCli ?? runCli)(
+  return {
+    operation,
     executable,
+    uploadRoot,
+    settings,
+    timeout,
+    minimalEnv,
+    runCli: dependencies.runCli ?? runCli,
+  };
+}
+
+export async function executePreparedVercelOperation(prepared) {
+  if (prepared.operation === "RECOVER") {
+    return recoverDeployment(prepared.settings);
+  }
+  const result = await prepared.runCli(
+    prepared.executable,
     [
       "deploy",
       ".",
@@ -306,13 +317,17 @@ export async function deployOrRecover(env = process.env, dependencies = {}) {
       "--target=preview",
       "--skip-domain",
       "--project",
-      settings.projectId,
+      prepared.settings.projectId,
       "--meta",
-      `notaAttestation=${settings.recoveryKey}`,
+      `notaAttestation=${prepared.settings.recoveryKey}`,
       "--scope",
-      settings.teamId,
+      prepared.settings.teamId,
     ],
-    { cwd: uploadRoot, env: minimalEnv, timeoutMs: timeout * 1000 },
+    {
+      cwd: prepared.uploadRoot,
+      env: prepared.minimalEnv,
+      timeoutMs: prepared.timeout * 1000,
+    },
   );
   if (!result.started) fail("PROVIDER_DEFINITELY_NOT_SENT");
   if (
@@ -321,10 +336,19 @@ export async function deployOrRecover(env = process.env, dependencies = {}) {
     !result.overflow &&
     result.stdout
   ) {
-    settings.candidateOrigin = deploymentUrl(result.stdout);
-    return getDeployment(new URL(settings.candidateOrigin).hostname, settings);
+    prepared.settings.candidateOrigin = deploymentUrl(result.stdout);
+    return getDeployment(
+      new URL(prepared.settings.candidateOrigin).hostname,
+      prepared.settings,
+    );
   }
-  return recoverDeployment(settings);
+  return recoverDeployment(prepared.settings);
+}
+
+export async function deployOrRecover(env = process.env, dependencies = {}) {
+  return executePreparedVercelOperation(
+    prepareVercelOperation(env, dependencies),
+  );
 }
 
 async function main() {

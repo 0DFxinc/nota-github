@@ -18,13 +18,14 @@ function environment() {
 test("durably begins the exact provider operation before invoking Vercel", async () => {
   const order = [];
   const result = await uploadVercelWithAttestation(environment(), {
+    prepareVercelOperation: () => ({ operation: "DEPLOY" }),
     callNotaApi: async (command, env) => {
       order.push(`nota:${command}`);
       assert.equal(command, "attest");
       assert.match(env.NOTA_REQUEST_FILE, /nota-provider-begin-/);
       return { attestationId, providerOperation: "DEPLOY" };
     },
-    deployOrRecover: async () => {
+    executePreparedVercelOperation: async () => {
       order.push("vercel");
       return { deploymentId: "dpl_12345678" };
     },
@@ -38,14 +39,31 @@ test("never invokes Vercel when the durable begin response is lost", async () =>
   let providerCalls = 0;
   await assert.rejects(
     uploadVercelWithAttestation(environment(), {
+      prepareVercelOperation: () => ({ operation: "DEPLOY" }),
       callNotaApi: async () => {
         throw new NotaApiError("NOTA_API_UNAVAILABLE");
       },
-      deployOrRecover: async () => {
+      executePreparedVercelOperation: async () => {
         providerCalls += 1;
       },
     }),
     /NOTA_API_UNAVAILABLE/,
   );
   assert.equal(providerCalls, 0);
+});
+
+test("rejects deterministic provider inputs before durable begin", async () => {
+  let beginCalls = 0;
+  await assert.rejects(
+    uploadVercelWithAttestation(environment(), {
+      prepareVercelOperation: () => {
+        throw new Error("INVALID_TIMEOUT");
+      },
+      callNotaApi: async () => {
+        beginCalls += 1;
+      },
+    }),
+    /INVALID_TIMEOUT/,
+  );
+  assert.equal(beginCalls, 0);
 });

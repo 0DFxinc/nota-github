@@ -8,7 +8,11 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { callNotaApi, NotaApiError } from "./nota-api.mjs";
-import { deployOrRecover, VercelProviderError } from "./vercel-provider.mjs";
+import {
+  executePreparedVercelOperation,
+  prepareVercelOperation,
+  VercelProviderError,
+} from "./vercel-provider.mjs";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -59,8 +63,16 @@ export async function uploadVercelWithAttestation(
   env = process.env,
   dependencies = {},
 ) {
+  // Complete every deterministic local validation before the durable BEGIN.
+  // After BEGIN, any ambiguity remains recovery-only; callers cannot reset it.
+  const prepared = (
+    dependencies.prepareVercelOperation ?? prepareVercelOperation
+  )(env, dependencies.providerDependencies);
   await beginProvider(env, dependencies.callNotaApi ?? callNotaApi);
-  return (dependencies.deployOrRecover ?? deployOrRecover)(env, dependencies.providerDependencies);
+  return (
+    dependencies.executePreparedVercelOperation ??
+    executePreparedVercelOperation
+  )(prepared);
 }
 
 async function main() {
