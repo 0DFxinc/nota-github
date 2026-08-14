@@ -13,7 +13,7 @@ const workflows = [
   "run-static-smoke.yml",
   "run.yml",
 ];
-const helper = "b2b9b42768619000b4e13f23fa0a44c0a8c6d3ae";
+const helper = "eef67dc5e01dc9e38e8ac015f5628287a6ec7c97";
 const sha = /^[0-9a-f]{40}$/;
 
 function text(name) {
