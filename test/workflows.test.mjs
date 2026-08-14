@@ -43,6 +43,7 @@ test("pull requests run the locked public validation suite", () => {
   assert.ok(Object.hasOwn(workflow.on, "pull_request"));
   assert.deepEqual(workflow.on?.push?.branches, ["main", "development"]);
   assert.deepEqual(workflow.permissions, { contents: "read" });
+  assert.match(source, /fetch-depth:\s*0/);
   for (const match of source.matchAll(/^\s*uses:\s*([^\s]+)$/gm)) {
     assert.match(match[1], /@[0-9a-f]{40}$/);
   }
