@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   smoke:
-    name: Nota static smoke / ${{ github.sha }}
+    name: Nota static smoke / ${{ github.run_id }} / ${{ github.run_attempt }}
     runs-on: ubuntu-latest
     timeout-minutes: 270
     steps:
@@ -32,14 +32,14 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: 0DFxinc/nota-github
-          ref: 307e876a533ab17c4590f2bb73c0a9dbbb3a6133
+          ref: 36cd88d16d991d68e9a3f458ad94b62b3ee19ecf
           path: _nota_helper
           persist-credentials: false
       - name: Run informational static smoke
         shell: bash
         env:
           POLICY_ID: ${{ inputs.policy-id }}
-          JOB_NAME: Nota static smoke / ${{ github.sha }}
+          JOB_NAME: Nota static smoke / ${{ github.run_id }} / ${{ github.run_attempt }}
           NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
           TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
         run: |

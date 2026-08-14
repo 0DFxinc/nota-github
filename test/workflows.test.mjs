@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { execFileSync } from "node:child_process";
 import test from "node:test";
 import { parse } from "yaml";
 
@@ -12,7 +13,7 @@ const workflows = [
   "run-static-smoke.yml",
   "run.yml",
 ];
-const helper = "307e876a533ab17c4590f2bb73c0a9dbbb3a6133";
+const helper = "36cd88d16d991d68e9a3f458ad94b62b3ee19ecf";
 const sha = /^[0-9a-f]{40}$/;
 
 function text(name) {
@@ -63,7 +64,13 @@ test("static smoke has no environment, secrets, target input, or proof language"
 test("release manifest matches the public contract and helper lock", () => {
   const manifest = JSON.parse(readFileSync(join(root, "release-manifest.json"), "utf8"));
   assert.equal(manifest.helperCommit, helper);
-  assert.match(manifest.helperTree, sha);
+  assert.equal(
+    execFileSync("git", ["rev-parse", `${helper}^{tree}`], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim(),
+    manifest.helperTree,
+  );
   const contract = readFileSync(join(root, "contracts", "github-ci-attestation-v1.json"));
   assert.equal(createHash("sha256").update(contract).digest("hex"), manifest.contractSha256);
   const lockBytes = readFileSync(join(root, "package-lock.json"));
