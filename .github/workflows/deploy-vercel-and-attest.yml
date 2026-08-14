@@ -1,0 +1,218 @@
+name: Deploy Vercel preview and attest
+
+on:
+  workflow_call:
+    inputs:
+      policy-id:
+        description: Nota GitHub trigger policy UUID
+        required: true
+        type: string
+      nota-environment:
+        description: production or development Nota control plane
+        required: false
+        default: production
+        type: string
+      github-environment:
+        description: Reviewer-protected environment containing only VERCEL_TOKEN
+        required: true
+        type: string
+      timeout-seconds:
+        description: Maximum provider build time
+        required: false
+        default: 900
+        type: number
+    outputs:
+      attestation-id:
+        description: Stable Nota attestation identifier
+        value: ${{ jobs.deploy.outputs.attestation-id }}
+      environment-url:
+        description: Unique verified Vercel deployment origin
+        value: ${{ jobs.deploy.outputs.environment-url }}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  preflight:
+    name: Secret-free deployment preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out reviewed Nota helper
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: 0DFxinc/nota-github
+          ref: eef67dc5e01dc9e38e8ac015f5628287a6ec7c97
+          path: _nota_helper
+          persist-credentials: false
+      - name: Verify helper and preflight authority
+        shell: bash
+        env:
+          POLICY_ID: ${{ inputs.policy-id }}
+          GITHUB_ENVIRONMENT_NAME: ${{ inputs.github-environment }}
+          NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
+        run: |
+          set -euo pipefail
+          test "$(git -C "$GITHUB_WORKSPACE/_nota_helper" rev-parse HEAD)" = "eef67dc5e01dc9e38e8ac015f5628287a6ec7c97"
+          test "$(sha256sum "$GITHUB_WORKSPACE/_nota_helper/package-lock.json" | cut -d' ' -f1)" = "7a964e61a614c1a996087ab2a1b737a17c44433bbcab3bd16f062ae2e5c632ba"
+          [[ "$POLICY_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo "policy-id must be a UUID" >&2; exit 2; }
+          request="$RUNNER_TEMP/nota-preflight-request.json"
+          response="$RUNNER_TEMP/nota-preflight-response.json"
+          jq -nc --arg policyId "$POLICY_ID" --arg environment "$GITHUB_ENVIRONMENT_NAME" \
+            '{operation:"PREFLIGHT_VERCEL",policyId:$policyId,githubEnvironment:$environment,jobName:"Secret-free deployment preflight"}' > "$request"
+          NOTA_REQUEST_FILE="$request" node "$GITHUB_WORKSPACE/_nota_helper/scripts/nota-api.mjs" preflight > "$response"
+          jq -e --arg environment "$GITHUB_ENVIRONMENT_NAME" '.ready == true and .githubEnvironment == $environment' "$response" >/dev/null
+
+  deploy:
+    name: Trusted Vercel upload
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: nota-attestation-${{ github.repository_id }}-${{ inputs.policy-id }}-${{ github.event.pull_request.number || github.run_id }}
+      cancel-in-progress: false
+    environment:
+      name: ${{ inputs.github-environment }}
+      deployment: false
+    outputs:
+      attestation-id: ${{ steps.finalize.outputs.attestation-id }}
+      environment-url: ${{ steps.finalize.outputs.environment-url }}
+    steps:
+      - name: Check out reviewed Nota helper
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: 0DFxinc/nota-github
+          ref: eef67dc5e01dc9e38e8ac015f5628287a6ec7c97
+          path: _nota_helper
+          persist-credentials: false
+      - name: Set up pinned Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.14.0
+          cache: npm
+          cache-dependency-path: _nota_helper/package-lock.json
+      - name: Install reviewed helper dependencies
+        shell: bash
+        env:
+          NPM_CONFIG_USERCONFIG: /dev/null
+          NPM_CONFIG_GLOBALCONFIG: /dev/null
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+        run: |
+          set -euo pipefail
+          test "$(git -C "$GITHUB_WORKSPACE/_nota_helper" rev-parse HEAD)" = "eef67dc5e01dc9e38e8ac015f5628287a6ec7c97"
+          test "$(sha256sum "$GITHUB_WORKSPACE/_nota_helper/package-lock.json" | cut -d' ' -f1)" = "7a964e61a614c1a996087ab2a1b737a17c44433bbcab3bd16f062ae2e5c632ba"
+          npm --prefix "$GITHUB_WORKSPACE/_nota_helper" ci --ignore-scripts --no-audit --no-fund
+      - name: Revalidate authority before token use
+        id: authority
+        shell: bash
+        env:
+          POLICY_ID: ${{ inputs.policy-id }}
+          GITHUB_ENVIRONMENT_NAME: ${{ inputs.github-environment }}
+          NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
+        run: |
+          set -euo pipefail
+          request="$RUNNER_TEMP/nota-runtime-preflight-request.json"
+          response="$RUNNER_TEMP/nota-runtime-preflight-response.json"
+          jq -nc --arg policyId "$POLICY_ID" --arg environment "$GITHUB_ENVIRONMENT_NAME" \
+            '{operation:"PREFLIGHT_VERCEL_RUNTIME",policyId:$policyId,githubEnvironment:$environment,jobName:"Trusted Vercel upload"}' > "$request"
+          NOTA_REQUEST_FILE="$request" node "$GITHUB_WORKSPACE/_nota_helper/scripts/nota-api.mjs" preflight > "$response"
+          jq -e --arg environment "$GITHUB_ENVIRONMENT_NAME" '
+            .ready == true and .githubEnvironment == $environment and
+            (.projectId | test("^prj_[A-Za-z0-9]{8,128}$")) and
+            (.teamId | test("^team_[A-Za-z0-9]{8,128}$"))
+          ' "$response" >/dev/null
+          echo "project-id=$(jq -r '.projectId' "$response")" >> "$GITHUB_OUTPUT"
+          echo "team-id=$(jq -r '.teamId' "$response")" >> "$GITHUB_OUTPUT"
+      - name: Validate Vercel project before any provider or GitHub mutation
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ steps.authority.outputs.project-id }}
+          VERCEL_ORG_ID: ${{ steps.authority.outputs.team-id }}
+        run: node "$GITHUB_WORKSPACE/_nota_helper/scripts/preflight-vercel.mjs" >/dev/null
+      - name: Allocate or recover Nota App deployment
+        id: prepare
+        shell: bash
+        env:
+          POLICY_ID: ${{ inputs.policy-id }}
+          GITHUB_ENVIRONMENT_NAME: ${{ inputs.github-environment }}
+          NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
+        run: |
+          set -euo pipefail
+          request="$RUNNER_TEMP/nota-prepare-request.json"
+          response="$RUNNER_TEMP/nota-prepare-response.json"
+          jq -nc --arg policyId "$POLICY_ID" --arg environment "$GITHUB_ENVIRONMENT_NAME" \
+            '{operation:"PREPARE_VERCEL",policyId:$policyId,githubEnvironment:$environment,jobName:"Trusted Vercel upload"}' > "$request"
+          NOTA_REQUEST_FILE="$request" node "$GITHUB_WORKSPACE/_nota_helper/scripts/nota-api.mjs" attest > "$response"
+          jq -e '
+            (.attestationId | test("^[0-9a-f-]{36}$")) and
+            (.subjectSha | test("^[0-9a-f]{40}$")) and
+            (.sourceRepository | test("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")) and
+            (.markerSha256 | test("^[0-9a-f]{64}$")) and
+            (.markerBase64 | test("^[A-Za-z0-9+/]+={0,2}$")) and
+            (.recoveryKey | test("^[A-Za-z0-9._:-]{16,160}$")) and
+            (.providerOperation == "DEPLOY" or .providerOperation == "RECOVER") and
+            .markerFile == "public/.well-known/nota-deployment.json"
+          ' "$response" >/dev/null
+          for field in attestationId subjectSha sourceRepository projectDirectory markerFile markerBase64 markerSha256 recoveryKey providerOperation; do
+            echo "$field=$(jq -r --arg field "$field" '.[$field]' "$response")" >> "$GITHUB_OUTPUT"
+          done
+      - name: Check out the server-resolved PR source without credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: ${{ steps.prepare.outputs.sourceRepository }}
+          ref: ${{ steps.prepare.outputs.subjectSha }}
+          path: _nota_source
+          persist-credentials: false
+      - name: Materialize marker in sanitized upload tree
+        id: stage
+        shell: bash
+        env:
+          NOTA_SOURCE_ROOT: ${{ github.workspace }}/_nota_source
+          NOTA_PROJECT_DIRECTORY: ${{ steps.prepare.outputs.projectDirectory }}
+          NOTA_UPLOAD_ROOT: ${{ runner.temp }}/nota-upload
+          NOTA_MARKER_FILE: ${{ steps.prepare.outputs.markerFile }}
+          NOTA_MARKER_BASE64: ${{ steps.prepare.outputs.markerBase64 }}
+          NOTA_MARKER_SHA256: ${{ steps.prepare.outputs.markerSha256 }}
+        run: node "$GITHUB_WORKSPACE/_nota_helper/scripts/stage-upload.mjs" >/dev/null
+      - name: Begin and deploy or recover exact Vercel preview
+        id: provider
+        shell: bash
+        env:
+          NOTA_ATTESTATION_ID: ${{ steps.prepare.outputs.attestationId }}
+          NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ steps.authority.outputs.project-id }}
+          VERCEL_ORG_ID: ${{ steps.authority.outputs.team-id }}
+          NOTA_HELPER_ROOT: ${{ github.workspace }}/_nota_helper
+          NOTA_UPLOAD_ROOT: ${{ runner.temp }}/nota-upload
+          NOTA_RECOVERY_KEY: ${{ steps.prepare.outputs.recoveryKey }}
+          NOTA_PROVIDER_OPERATION: ${{ steps.prepare.outputs.providerOperation }}
+          NOTA_PROVIDER_TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+        run: node "$GITHUB_WORKSPACE/_nota_helper/scripts/vercel-upload.mjs" > "$RUNNER_TEMP/nota-provider-receipt.json"
+      - name: Finalize App-owned deployment proof
+        id: finalize
+        shell: bash
+        env:
+          ATTESTATION_ID: ${{ steps.prepare.outputs.attestationId }}
+          NOTA_ENVIRONMENT: ${{ inputs.nota-environment }}
+        run: |
+          set -euo pipefail
+          receipt="$RUNNER_TEMP/nota-provider-receipt.json"
+          jq -e '
+            (.deploymentId | test("^dpl_[A-Za-z0-9]{8,160}$")) and
+            (.origin | test("^https://[A-Za-z0-9-]+\\.vercel\\.app$")) and
+            .state == "READY"
+          ' "$receipt" >/dev/null
+          request="$RUNNER_TEMP/nota-finalize-request.json"
+          response="$RUNNER_TEMP/nota-finalize-response.json"
+          jq -nc --arg id "$ATTESTATION_ID" --slurpfile provider "$receipt" \
+            '{operation:"FINALIZE_VERCEL",attestationId:$id,provider:$provider[0]}' > "$request"
+          NOTA_REQUEST_FILE="$request" node "$GITHUB_WORKSPACE/_nota_helper/scripts/nota-api.mjs" attest > "$response"
+          jq -e --arg id "$ATTESTATION_ID" '
+            .attestationId == $id and .proofState == "SETTLED" and
+            (.environmentUrl | test("^https://[A-Za-z0-9-]+\\.vercel\\.app$"))
+          ' "$response" >/dev/null
+          echo "attestation-id=$ATTESTATION_ID" >> "$GITHUB_OUTPUT"
+          echo "environment-url=$(jq -r '.environmentUrl' "$response")" >> "$GITHUB_OUTPUT"

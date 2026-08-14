@@ -1,12 +1,28 @@
-# Nota GitHub test gate
+# Nota GitHub CI workflows
 
-This public repository contains Nota's reusable GitHub Actions workflow. The
-workflow authenticates to Nota with GitHub OIDC, joins an App-owned gate, waits
-for the authoritative SEQUENCE-suite result, and gives the calling GitHub job
-the same conclusion.
+This public repository contains SHA-pinned reusable workflows for Nota's
+GitHub test gate, informational fixed-origin smoke testing, and first-class
+Vercel preview deployment attestation. They authenticate with GitHub OIDC; no
+Nota API key or PAT is accepted.
+
+For new onboarding, read [Deployment attestation v1](docs/DEPLOYMENT_ATTESTATION.md)
+and start with the [Vercel](examples/vercel-preview.yml) or
+[fixed-origin smoke](examples/static-smoke.yml) example. The setup validator is
+`.github/workflows/preflight.yml`.
+
+The Vercel workflow automatically creates the Nota-App GitHub Deployment,
+places the exact four-field marker in a sanitized copy of the application
+before remote build, verifies the unique provider URL and served marker, and
+creates the successful Deployment Status. It does not execute pull-request
+code on the token-bearing runner and does not use stable aliases.
+
+Static smoke is deliberately informational and nonpromotable. An arbitrary
+fixed host cannot prove PR-SHA freshness merely by accepting a new marker, so
+generic required fixed-URL attestation remains unsupported in v1.
 
 Admission is a bounded operation: a gate that is still waiting on its App
-webhook is retried with backoff for at most five minutes. After admission, the
+webhook is retried every five seconds for at most five minutes, with a fresh
+GitHub OIDC token on every attempt. After admission, the
 workflow uses authenticated database-only status reads, so polling does not
 consume GitHub App API quota.
 
@@ -27,7 +43,7 @@ name: Preview deployment and Nota gate
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize]
 
 permissions:
   contents: read

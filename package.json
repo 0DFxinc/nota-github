@@ -1,0 +1,61 @@
+{
+  "name": "@0dfxinc/nota-github",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "test": "node --test",
+    "test:contracts": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "vercel": "58.11.0"
+  },
+  "overrides": {
+    "@tootallnate/once": "2.0.1",
+    "@vercel/backends": {
+      "path-to-regexp": "8.4.2"
+    },
+    "@vercel/blob": {
+      "undici": "6.28.0"
+    },
+    "@vercel/express": {
+      "path-to-regexp": "8.4.2"
+    },
+    "@vercel/fun": {
+      "path-to-regexp": "8.4.2",
+      "tar": "7.5.22"
+    },
+    "@vercel/hono": {
+      "path-to-regexp": "8.4.2"
+    },
+    "@vercel/node": {
+      "path-to-regexp": "6.3.0",
+      "undici": "6.28.0"
+    },
+    "@vercel/python-analysis": {
+      "js-yaml": "5.2.3",
+      "minimatch": "10.2.6",
+      "smol-toml": "1.8.0"
+    },
+    "@vercel/remix-builder": {
+      "path-to-regexp": "6.3.0"
+    },
+    "@vercel/rust": {
+      "smol-toml": "1.8.0"
+    },
+    "@vercel/static-config": {
+      "ajv": "8.20.0"
+    },
+    "tar": "7.5.22",
+    "vercel": {
+      "smol-toml": "1.8.0",
+      "undici": "6.28.0"
+    }
+  },
+  "devDependencies": {
+    "yaml": "2.9.0"
+  }
+}

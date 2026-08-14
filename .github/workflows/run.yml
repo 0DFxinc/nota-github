@@ -43,7 +43,9 @@ jobs:
     name: Nota test gate
     runs-on: ubuntu-latest
     timeout-minutes: 270
-    environment: ${{ inputs.github-environment }}
+    environment:
+      name: ${{ inputs.github-environment }}
+      deployment: false
     outputs:
       gate-attempt-id: ${{ steps.wait.outputs.gate-attempt-id }}
       conclusion: ${{ steps.wait.outputs.conclusion }}
