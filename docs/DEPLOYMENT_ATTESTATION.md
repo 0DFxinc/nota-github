@@ -60,7 +60,7 @@ Deployment, status, policy, suite, environment, or Vercel mutation:
 ```yaml
 jobs:
   validate:
-    uses: 0DFxinc/nota-github/.github/workflows/preflight.yml@5d77b34ec276a4a0c15820c341f788d81aef5bf1
+    uses: 0DFxinc/nota-github/.github/workflows/preflight.yml@ef9ea95296f04b5c91cd54c084d678a39eb9c0ef
     with:
       policy-id: 00000000-0000-4000-8000-000000000000
       nota-environment: development
@@ -81,6 +81,14 @@ creates the successful status after the provider record and served marker have
 both been re-read. A rerun recovers with the same semantic key; an ambiguous
 provider mutation is quarantined instead of blindly repeated.
 
+If the Vercel child process is proven not to have spawned, the helper asks Nota
+to atomically reset only that unstarted provider grant and then fails the job so
+a normal rerun can retry. Nota rejects the reset after any provider deployment
+ID or origin exists. Every failure after process spawn remains recovery-only.
+GitHub CI v1 intentionally triggers only on `opened` and `synchronize`.
+Reopening an unchanged PR does not mint a new gate lifecycle; push a reviewed
+commit to produce a new SHA and `synchronize` event.
+
 ## Fixed-origin smoke setup
 
 Create a `STATIC_SMOKE` policy for an exact HTTPS origin and an exact trigger
@@ -96,6 +104,11 @@ smoke Check cannot satisfy `Nota / Test Gate v1`; Nota's validator rejects a
 ruleset that selects the smoke context.
 
 ## Actionable preflight errors
+
+If the reviewed Actions job starts before GitHub delivers the corresponding
+App webhook, the secret-free preflight waits for at most five minutes. Each
+attempt uses a fresh GitHub OIDC token, and only the exact mutation-free
+`425 GATE_NOT_READY` response is retried. Every other error fails immediately.
 
 The validator fails before mutation and returns a stable code for a missing App
 installation or capability, disabled/wrong-kind policy, non-`SEQUENCE` suite,

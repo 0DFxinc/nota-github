@@ -2,7 +2,7 @@ name: Attested Vercel preview and Nota gate
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize]
 
 permissions:
   contents: read
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   deploy:
-    uses: 0DFxinc/nota-github/.github/workflows/deploy-vercel-and-attest.yml@5d77b34ec276a4a0c15820c341f788d81aef5bf1
+    uses: 0DFxinc/nota-github/.github/workflows/deploy-vercel-and-attest.yml@ef9ea95296f04b5c91cd54c084d678a39eb9c0ef
     with:
       policy-id: 00000000-0000-4000-8000-000000000000
       nota-environment: development
@@ -18,7 +18,7 @@ jobs:
 
   nota:
     needs: deploy
-    uses: 0DFxinc/nota-github/.github/workflows/run.yml@5d77b34ec276a4a0c15820c341f788d81aef5bf1
+    uses: 0DFxinc/nota-github/.github/workflows/run.yml@ef9ea95296f04b5c91cd54c084d678a39eb9c0ef
     with:
       policy-id: 00000000-0000-4000-8000-000000000000
       nota-environment: development

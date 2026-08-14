@@ -21,7 +21,8 @@ fixed host cannot prove PR-SHA freshness merely by accepting a new marker, so
 generic required fixed-URL attestation remains unsupported in v1.
 
 Admission is a bounded operation: a gate that is still waiting on its App
-webhook is retried with backoff for at most five minutes. After admission, the
+webhook is retried every five seconds for at most five minutes, with a fresh
+GitHub OIDC token on every attempt. After admission, the
 workflow uses authenticated database-only status reads, so polling does not
 consume GitHub App API quota.
 
@@ -42,7 +43,7 @@ name: Preview deployment and Nota gate
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize]
 
 permissions:
   contents: read
