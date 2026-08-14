@@ -7,7 +7,7 @@ import test from "node:test";
 import { parse } from "yaml";
 
 const root = new URL("..", import.meta.url).pathname;
-const workflows = [
+const reusableWorkflows = [
   "deploy-vercel-and-attest.yml",
   "preflight.yml",
   "run-static-smoke.yml",
@@ -20,8 +20,8 @@ function text(name) {
   return readFileSync(join(root, ".github", "workflows", name), "utf8");
 }
 
-test("all public workflows parse and pin every external action", () => {
-  for (const name of workflows) {
+test("all reusable workflows parse and pin every external action", () => {
+  for (const name of reusableWorkflows) {
     const source = text(name);
     const workflow = parse(source);
     assert.equal(typeof workflow, "object", name);
@@ -34,6 +34,22 @@ test("all public workflows parse and pin every external action", () => {
       assert.match(value, /@[0-9a-f]{40}$/, `${name}: ${value}`);
     }
   }
+});
+
+test("pull requests run the locked public validation suite", () => {
+  const source = text("ci.yml");
+  const workflow = parse(source);
+  assert.equal(typeof workflow, "object");
+  assert.ok(Object.hasOwn(workflow.on, "pull_request"));
+  assert.deepEqual(workflow.on?.push?.branches, ["main", "development"]);
+  assert.deepEqual(workflow.permissions, { contents: "read" });
+  for (const match of source.matchAll(/^\s*uses:\s*([^\s]+)$/gm)) {
+    assert.match(match[1], /@[0-9a-f]{40}$/);
+  }
+  assert.match(source, /npm ci --ignore-scripts --no-audit --no-fund/);
+  assert.match(source, /npm test/);
+  assert.match(source, /npm audit --omit=dev --audit-level=high/);
+  assert.doesNotMatch(source, /secrets\.|id-token:\s*write/);
 });
 
 test("Vercel workflow preserves the approved trust and materialization order", () => {
