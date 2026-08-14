@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const LIMIT = 128 * 1024;
+const PREFLIGHT_GATE_ATTEMPTS = 60;
+const PREFLIGHT_GATE_DELAY_MS = 5_000;
+const PREFLIGHT_GATE_WAIT_MS = 5 * 60 * 1_000;
 const ENDPOINTS = {
   production: "https://app.trynota.ai",
   development: "https://dev.trynota.ai",
@@ -87,46 +90,76 @@ export async function callNotaApi(
   const endpoint = `${base}${path}`;
   const oidcUrl = new URL(requestUrl);
   oidcUrl.searchParams.set("audience", endpoint);
-  const oidcResponse = await fetchImpl(oidcUrl, {
-    headers: { Authorization: `Bearer ${requestToken}` },
-    redirect: "error",
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!oidcResponse.ok) fail("GITHUB_OIDC_UNAVAILABLE");
-  const oidc = await boundedJson(oidcResponse, "GITHUB_OIDC_RESPONSE");
-  if (typeof oidc.value !== "string" || oidc.value.length > 16 * 1024) {
-    fail("GITHUB_OIDC_RESPONSE_INVALID");
-  }
-  const attempts = options.retryIdenticalPostOnce === true ? 2 : 1;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    let response;
-    let result;
-    try {
-      response = await fetchImpl(endpoint, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${oidc.value}`,
-          "Content-Type": "application/json",
-        },
-        body: bytes,
-        redirect: "error",
-        signal: AbortSignal.timeout(30_000),
-      });
-      result = await boundedJson(response, "NOTA_RESPONSE");
-    } catch (error) {
-      if (attempt + 1 < attempts) continue;
-      throw error;
+  const readinessAttempts =
+    command === "preflight" ? PREFLIGHT_GATE_ATTEMPTS : 1;
+  const readinessDeadline = Date.now() + PREFLIGHT_GATE_WAIT_MS;
+  const sleepImpl =
+    options.sleepImpl ??
+    ((milliseconds) =>
+      new Promise((resolve) => setTimeout(resolve, milliseconds)));
+
+  readinessLoop: for (
+    let readinessAttempt = 0;
+    readinessAttempt < readinessAttempts;
+    readinessAttempt += 1
+  ) {
+    if (readinessAttempt > 0 && Date.now() >= readinessDeadline) {
+      fail("GATE_NOT_READY");
     }
-    if (!response.ok) {
-      const code =
-        typeof result.error === "string" &&
-        /^[A-Z0-9_]{1,80}$/.test(result.error)
-          ? result.error
-          : "NOTA_REQUEST_REJECTED";
-      fail(code);
+    const oidcResponse = await fetchImpl(oidcUrl, {
+      headers: { Authorization: `Bearer ${requestToken}` },
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!oidcResponse.ok) fail("GITHUB_OIDC_UNAVAILABLE");
+    const oidc = await boundedJson(oidcResponse, "GITHUB_OIDC_RESPONSE");
+    if (typeof oidc.value !== "string" || oidc.value.length > 16 * 1024) {
+      fail("GITHUB_OIDC_RESPONSE_INVALID");
     }
-    return result;
+
+    const postAttempts = options.retryIdenticalPostOnce === true ? 2 : 1;
+    for (let postAttempt = 0; postAttempt < postAttempts; postAttempt += 1) {
+      let response;
+      let result;
+      try {
+        response = await fetchImpl(endpoint, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${oidc.value}`,
+            "Content-Type": "application/json",
+          },
+          body: bytes,
+          redirect: "error",
+          signal: AbortSignal.timeout(30_000),
+        });
+        result = await boundedJson(response, "NOTA_RESPONSE");
+      } catch (error) {
+        if (postAttempt + 1 < postAttempts) continue;
+        throw error;
+      }
+      if (!response.ok) {
+        const code =
+          typeof result.error === "string" &&
+          /^[A-Z0-9_]{1,80}$/.test(result.error)
+            ? result.error
+            : "NOTA_REQUEST_REJECTED";
+        if (
+          command === "preflight" &&
+          response.status === 425 &&
+          code === "GATE_NOT_READY" &&
+          readinessAttempt + 1 < readinessAttempts &&
+          Date.now() < readinessDeadline
+        ) {
+          await sleepImpl(
+            Math.min(PREFLIGHT_GATE_DELAY_MS, readinessDeadline - Date.now()),
+          );
+          continue readinessLoop;
+        }
+        fail(code);
+      }
+      return result;
+    }
   }
   fail("NOTA_API_UNAVAILABLE");
 }

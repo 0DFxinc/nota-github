@@ -97,3 +97,99 @@ test("retries an ambiguous BEGIN response once with the same OIDC token and body
   assert.equal(postCalls[1].init.headers.Authorization, "Bearer signed-oidc");
   assert.deepEqual(postCalls[0].init.body, postCalls[1].init.body);
 });
+
+test("bounded preflight admission retry mints a fresh OIDC token", async () => {
+  const calls = [];
+  const sleeps = [];
+  let oidcRequests = 0;
+  let preflightRequests = 0;
+  const result = await callNotaApi(
+    "preflight",
+    env,
+    async (url, init) => {
+      calls.push({ url: String(url), init });
+      if (String(url).startsWith("https://oidc.example/")) {
+        oidcRequests += 1;
+        return new Response(`{"value":"signed-oidc-${oidcRequests}"}`, {
+          status: 200,
+        });
+      }
+      preflightRequests += 1;
+      if (preflightRequests === 1) {
+        return new Response('{"error":"GATE_NOT_READY"}', { status: 425 });
+      }
+      return new Response('{"ready":true}', { status: 200 });
+    },
+    { sleepImpl: async (milliseconds) => sleeps.push(milliseconds) },
+  );
+
+  assert.deepEqual(result, { ready: true });
+  assert.deepEqual(sleeps, [5_000]);
+  assert.equal(oidcRequests, 2);
+  const postCalls = calls.filter((call) =>
+    call.url.startsWith("https://dev.trynota.ai/"),
+  );
+  assert.equal(postCalls.length, 2);
+  assert.equal(postCalls[0].init.headers.Authorization, "Bearer signed-oidc-1");
+  assert.equal(postCalls[1].init.headers.Authorization, "Bearer signed-oidc-2");
+  assert.deepEqual(postCalls[0].init.body, postCalls[1].init.body);
+});
+
+test("preflight does not retry a non-admission 425 response", async () => {
+  let oidcRequests = 0;
+  let sleeps = 0;
+  await assert.rejects(
+    callNotaApi(
+      "preflight",
+      env,
+      async (url) => {
+        if (String(url).startsWith("https://oidc.example/")) {
+          oidcRequests += 1;
+          return new Response('{"value":"signed-oidc"}', { status: 200 });
+        }
+        return new Response('{"error":"POLICY_NOT_READY"}', { status: 425 });
+      },
+      {
+        sleepImpl: async () => {
+          sleeps += 1;
+        },
+      },
+    ),
+    (error) =>
+      error instanceof NotaApiError && error.code === "POLICY_NOT_READY",
+  );
+  assert.equal(oidcRequests, 1);
+  assert.equal(sleeps, 0);
+});
+
+test("preflight gate admission retries are attempt-bounded", async () => {
+  let oidcRequests = 0;
+  let preflightRequests = 0;
+  let sleeps = 0;
+  await assert.rejects(
+    callNotaApi(
+      "preflight",
+      env,
+      async (url) => {
+        if (String(url).startsWith("https://oidc.example/")) {
+          oidcRequests += 1;
+          return new Response(`{"value":"signed-oidc-${oidcRequests}"}`, {
+            status: 200,
+          });
+        }
+        preflightRequests += 1;
+        return new Response('{"error":"GATE_NOT_READY"}', { status: 425 });
+      },
+      {
+        sleepImpl: async () => {
+          sleeps += 1;
+        },
+      },
+    ),
+    (error) =>
+      error instanceof NotaApiError && error.code === "GATE_NOT_READY",
+  );
+  assert.equal(oidcRequests, 60);
+  assert.equal(preflightRequests, 60);
+  assert.equal(sleeps, 59);
+});
