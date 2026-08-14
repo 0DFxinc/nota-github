@@ -19,10 +19,12 @@ test("durably begins the exact provider operation before invoking Vercel", async
   const order = [];
   const result = await uploadVercelWithAttestation(environment(), {
     prepareVercelOperation: () => ({ operation: "DEPLOY" }),
-    callNotaApi: async (command, env) => {
+    callNotaApi: async (command, env, fetchImpl, options) => {
       order.push(`nota:${command}`);
       assert.equal(command, "attest");
       assert.match(env.NOTA_REQUEST_FILE, /nota-provider-begin-/);
+      assert.equal(fetchImpl, undefined);
+      assert.deepEqual(options, { retryIdenticalPostOnce: true });
       return { attestationId, providerOperation: "DEPLOY" };
     },
     executePreparedVercelOperation: async () => {

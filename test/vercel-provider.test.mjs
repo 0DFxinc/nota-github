@@ -84,7 +84,13 @@ test("response loss always recovers and never issues a second deploy", async () 
     runCli: async (executable, args, options) => {
       cliCalls += 1;
       cliInvocation = { executable, args, options };
-      return { started: true, code: null, stdout: "", timedOut: true, overflow: false };
+      return {
+        started: true,
+        code: null,
+        stdout: "",
+        timedOut: true,
+        overflow: false,
+      };
     },
   });
   assert.equal(cliCalls, 1);
@@ -96,7 +102,10 @@ test("response loss always recovers and never issues a second deploy", async () 
     ),
     ["--project", expected.projectId],
   );
-  assert.equal(cliInvocation.options.env.PATH.split(":")[0], dirname(process.execPath));
+  assert.equal(
+    cliInvocation.options.env.PATH.split(":")[0],
+    dirname(process.execPath),
+  );
   assert.deepEqual(Object.keys(cliInvocation.options.env).sort(), [
     "HOME",
     "NODE_ENV",
@@ -199,16 +208,17 @@ test("credential-free preflight rejects Git integration, OIDC and preview variab
     if (path.includes("/v10/projects/") && path.includes("/env?")) {
       return response({ envs: [], pagination: {} });
     }
-    if (path.includes("/v1/env?")) return response({ data: [], pagination: {} });
+    if (path.includes("/v1/env?"))
+      return response({ data: [], pagination: {} });
     if (path.includes("/v2/integrations/configurations?")) return response([]);
     if (path.includes("/v1/storage/stores?")) return response({ stores: [] });
     return response({
-          id: expected.projectId,
-          accountId: expected.teamId,
-          link: null,
-          oidcTokenConfig: { enabled: false },
-          autoExposeSystemEnvs: false,
-        });
+      id: expected.projectId,
+      accountId: expected.teamId,
+      link: null,
+      oidcTokenConfig: { enabled: false },
+      autoExposeSystemEnvs: false,
+    });
   };
   assert.deepEqual(await preflightVercel(env, safeFetch), {
     projectId: expected.projectId,
@@ -234,17 +244,20 @@ test("credential-free preflight rejects Git integration, OIDC and preview variab
         if (path.includes("/v10/projects/") && path.includes("/env?")) {
           return response({ envs: [], pagination: {} });
         }
-        if (path.includes("/v1/env?")) return response({ data: [], pagination: {} });
-        if (path.includes("/v2/integrations/configurations?")) return response([]);
-        if (path.includes("/v1/storage/stores?")) return response({ stores: [] });
+        if (path.includes("/v1/env?"))
+          return response({ data: [], pagination: {} });
+        if (path.includes("/v2/integrations/configurations?"))
+          return response([]);
+        if (path.includes("/v1/storage/stores?"))
+          return response({ stores: [] });
         return response({
-              id: expected.projectId,
-              accountId: expected.teamId,
-              link: null,
-              oidcTokenConfig: { enabled: false },
-              autoExposeSystemEnvs: false,
-              ...projectMutation,
-            });
+          id: expected.projectId,
+          accountId: expected.teamId,
+          link: null,
+          oidcTokenConfig: { enabled: false },
+          autoExposeSystemEnvs: false,
+          ...projectMutation,
+        });
       }),
     );
   }
@@ -257,16 +270,18 @@ test("credential-free preflight rejects Git integration, OIDC and preview variab
           pagination: {},
         });
       }
-      if (path.includes("/v1/env?")) return response({ data: [], pagination: {} });
-      if (path.includes("/v2/integrations/configurations?")) return response([]);
+      if (path.includes("/v1/env?"))
+        return response({ data: [], pagination: {} });
+      if (path.includes("/v2/integrations/configurations?"))
+        return response([]);
       if (path.includes("/v1/storage/stores?")) return response({ stores: [] });
       return response({
-            id: expected.projectId,
-            accountId: expected.teamId,
-            link: null,
-            oidcTokenConfig: { enabled: false },
-            autoExposeSystemEnvs: false,
-          });
+        id: expected.projectId,
+        accountId: expected.teamId,
+        link: null,
+        oidcTokenConfig: { enabled: false },
+        autoExposeSystemEnvs: false,
+      });
     }),
   );
   await assert.rejects(
@@ -275,7 +290,8 @@ test("credential-free preflight rejects Git integration, OIDC and preview variab
       if (path.includes("/v10/projects/") && path.includes("/env?")) {
         return response({ envs: [], pagination: {} });
       }
-      if (path.includes("/v1/env?")) return response({ data: [], pagination: {} });
+      if (path.includes("/v1/env?"))
+        return response({ data: [], pagination: {} });
       if (path.includes("/v2/integrations/configurations?")) {
         return response([{ projects: [expected.projectId] }]);
       }
@@ -289,5 +305,73 @@ test("credential-free preflight rejects Git integration, OIDC and preview variab
       });
     }),
     /VERCEL_PROJECT_INTEGRATIONS_PRESENT/,
+  );
+  await assert.rejects(
+    preflightVercel(env, async (url) => {
+      const path = String(url);
+      if (path.includes("/v10/projects/") && path.includes("/env?")) {
+        return response({ envs: [], pagination: {} });
+      }
+      if (path.includes("/v1/env?"))
+        return response({ data: [], pagination: {} });
+      if (path.includes("/v2/integrations/configurations?")) {
+        return response([{ id: "icfg_full_access", status: "ready" }]);
+      }
+      if (path.includes("/v1/storage/stores?")) return response({ stores: [] });
+      return response({
+        id: expected.projectId,
+        accountId: expected.teamId,
+        link: null,
+        oidcTokenConfig: { enabled: false },
+        autoExposeSystemEnvs: false,
+      });
+    }),
+    /VERCEL_PROJECT_INTEGRATIONS_PRESENT/,
+  );
+  await assert.rejects(
+    preflightVercel(env, async (url) => {
+      const path = String(url);
+      if (path.includes("/v10/projects/") && path.includes("/env?")) {
+        return response({ envs: [], pagination: {} });
+      }
+      if (path.includes("/v1/env?"))
+        return response({ data: [], pagination: {} });
+      if (path.includes("/v2/integrations/configurations?")) {
+        return response([{ projects: { project: expected.projectId } }]);
+      }
+      if (path.includes("/v1/storage/stores?")) return response({ stores: [] });
+      return response({
+        id: expected.projectId,
+        accountId: expected.teamId,
+        link: null,
+        oidcTokenConfig: { enabled: false },
+        autoExposeSystemEnvs: false,
+      });
+    }),
+    /VERCEL_PROJECT_INTEGRATIONS_PRESENT/,
+  );
+  await assert.doesNotReject(
+    preflightVercel(env, async (url) => {
+      const path = String(url);
+      if (path.includes("/v10/projects/") && path.includes("/env?")) {
+        return response({ envs: [], pagination: {} });
+      }
+      if (path.includes("/v1/env?"))
+        return response({ data: [], pagination: {} });
+      if (path.includes("/v2/integrations/configurations?")) {
+        return response([
+          { projects: ["prj_otherproject1"], status: "ready" },
+          { status: "uninstalled" },
+        ]);
+      }
+      if (path.includes("/v1/storage/stores?")) return response({ stores: [] });
+      return response({
+        id: expected.projectId,
+        accountId: expected.teamId,
+        link: null,
+        oidcTokenConfig: { enabled: false },
+        autoExposeSystemEnvs: false,
+      });
+    }),
   );
 });

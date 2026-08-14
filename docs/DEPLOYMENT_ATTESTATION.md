@@ -84,10 +84,10 @@ provider mutation is quarantined instead of blindly repeated.
 ## Fixed-origin smoke setup
 
 Create a `STATIC_SMOKE` policy for an exact HTTPS origin and an exact trigger
-and source ref. The policy must be informational. Each run uses a distinct
-Check name `Nota / Static Smoke v1 / <full-sha>` so it cannot become a stable
-required context. It has no GitHub environment, secrets,
-Deployment, marker, or artifact fields. Use
+and source ref. The policy must be informational. Each run uses the distinct
+Actions job name `Nota static smoke / <run-id> / <attempt>` and creates no Nota
+App Check, so it cannot become a stable required context. It has no GitHub
+environment, secrets, Deployment, marker, or artifact fields. Use
 [the static example](../examples/static-smoke.yml).
 
 If the fixed origin has not deployed the triggering SHA, the smoke test may
@@ -102,9 +102,11 @@ installation or capability, disabled/wrong-kind policy, non-`SEQUENCE` suite,
 caller blob mismatch, unsafe GitHub environment, active deployment listener,
 missing protected `VERCEL_TOKEN`, wrong Vercel project/team, Git-connected or
 credential-bearing Vercel project, project or team-shared Preview variables,
-attached integration resources, Secure Backend Access/OIDC, automation bypass,
-target redirect/private address, and marker mismatch. It never prints secret
-values or provider response bodies.
+attached integration resources, Secure Backend Access/OIDC, or automation
+bypass. Redirect/private-address and marker validation happen during
+finalization after the provider returns its unique origin; credential-free
+preflight does not fetch a runtime marker. No step prints secret values or
+provider response bodies.
 
 Start with `INFORMATIONAL`. A required ruleset is an operator-controlled later
 step after one passing and one intentionally failing end-to-end canary. This

@@ -1,9 +1,4 @@
-import {
-  mkdtempSync,
-  rmdirSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -14,7 +9,8 @@ import {
   VercelProviderError,
 } from "./vercel-provider.mjs";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function fail(code) {
   throw new VercelProviderError(code);
@@ -23,7 +19,10 @@ function fail(code) {
 async function beginProvider(env, callApi) {
   if (!env.RUNNER_TEMP?.startsWith("/")) fail("INVALID_RUNNER_TEMP");
   if (!UUID.test(env.NOTA_ATTESTATION_ID ?? "")) fail("INVALID_ATTESTATION_ID");
-  if (env.NOTA_PROVIDER_OPERATION !== "DEPLOY" && env.NOTA_PROVIDER_OPERATION !== "RECOVER") {
+  if (
+    env.NOTA_PROVIDER_OPERATION !== "DEPLOY" &&
+    env.NOTA_PROVIDER_OPERATION !== "RECOVER"
+  ) {
     fail("INVALID_PROVIDER_OPERATION");
   }
   const directory = mkdtempSync(join(env.RUNNER_TEMP, "nota-provider-begin-"));
@@ -38,10 +37,15 @@ async function beginProvider(env, callApi) {
       })}\n`,
       { encoding: "utf8", mode: 0o600 },
     );
-    const response = await callApi("attest", {
-      ...env,
-      NOTA_REQUEST_FILE: requestFile,
-    });
+    const response = await callApi(
+      "attest",
+      {
+        ...env,
+        NOTA_REQUEST_FILE: requestFile,
+      },
+      undefined,
+      { retryIdenticalPostOnce: true },
+    );
     if (
       response.attestationId !== env.NOTA_ATTESTATION_ID ||
       response.providerOperation !== env.NOTA_PROVIDER_OPERATION

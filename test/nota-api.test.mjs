@@ -41,7 +41,10 @@ test("uses a fixed control plane and endpoint-specific OIDC audience", async () 
 
 test("rejects arbitrary control planes and returns only bounded safe errors", async () => {
   await assert.rejects(
-    callNotaApi("preflight", { ...env, NOTA_ENVIRONMENT: "https://evil.example" }),
+    callNotaApi("preflight", {
+      ...env,
+      NOTA_ENVIRONMENT: "https://evil.example",
+    }),
     NotaApiError,
   );
   await assert.rejects(
@@ -50,12 +53,47 @@ test("rejects arbitrary control planes and returns only bounded safe errors", as
         ? new Response('{"value":"signed-oidc"}', { status: 200 })
         : new Response('{"error":"unsafe error with spaces"}', { status: 401 }),
     ),
-    (error) => error instanceof NotaApiError && error.code === "NOTA_REQUEST_REJECTED",
+    (error) =>
+      error instanceof NotaApiError && error.code === "NOTA_REQUEST_REJECTED",
   );
   await assert.rejects(
-    callNotaApi("preflight", env, async () =>
-      new Response("x".repeat(130 * 1024)),
+    callNotaApi(
+      "preflight",
+      env,
+      async () => new Response("x".repeat(130 * 1024)),
     ),
     /GITHUB_OIDC_RESPONSE_TOO_LARGE/,
   );
+});
+
+test("retries an ambiguous BEGIN response once with the same OIDC token and body", async () => {
+  const calls = [];
+  let posts = 0;
+  const result = await callNotaApi(
+    "attest",
+    { ...env, NOTA_REQUEST_FILE: requestFile() },
+    async (url, init) => {
+      calls.push({ url: String(url), init });
+      if (String(url).startsWith("https://oidc.example/")) {
+        return new Response('{"value":"signed-oidc"}', { status: 200 });
+      }
+      posts += 1;
+      if (posts === 1) throw new TypeError("response lost");
+      return new Response('{"attestationId":"ok"}', { status: 200 });
+    },
+    { retryIdenticalPostOnce: true },
+  );
+
+  assert.deepEqual(result, { attestationId: "ok" });
+  assert.equal(
+    calls.filter((call) => call.url.startsWith("https://oidc.example/")).length,
+    1,
+  );
+  const postCalls = calls.filter((call) =>
+    call.url.startsWith("https://dev.trynota.ai/"),
+  );
+  assert.equal(postCalls.length, 2);
+  assert.equal(postCalls[0].init.headers.Authorization, "Bearer signed-oidc");
+  assert.equal(postCalls[1].init.headers.Authorization, "Bearer signed-oidc");
+  assert.deepEqual(postCalls[0].init.body, postCalls[1].init.body);
 });

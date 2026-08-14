@@ -44,7 +44,8 @@ async function boundedJson(response, code) {
   const text = Buffer.concat(chunks, bytes).toString("utf8");
   try {
     const value = JSON.parse(text);
-    if (!value || typeof value !== "object" || Array.isArray(value)) fail(`${code}_INVALID`);
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      fail(`${code}_INVALID`);
     return value;
   } catch (error) {
     if (error instanceof NotaApiError) throw error;
@@ -56,6 +57,7 @@ export async function callNotaApi(
   command,
   env = process.env,
   fetchImpl = fetch,
+  options = {},
 ) {
   const base = ENDPOINTS[env.NOTA_ENVIRONMENT];
   const path = PATHS[command];
@@ -95,33 +97,48 @@ export async function callNotaApi(
   if (typeof oidc.value !== "string" || oidc.value.length > 16 * 1024) {
     fail("GITHUB_OIDC_RESPONSE_INVALID");
   }
-  const response = await fetchImpl(endpoint, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${oidc.value}`,
-      "Content-Type": "application/json",
-    },
-    body: bytes,
-    redirect: "error",
-    signal: AbortSignal.timeout(30_000),
-  });
-  const result = await boundedJson(response, "NOTA_RESPONSE");
-  if (!response.ok) {
-    const code =
-      typeof result.error === "string" && /^[A-Z0-9_]{1,80}$/.test(result.error)
-        ? result.error
-        : "NOTA_REQUEST_REJECTED";
-    fail(code);
+  const attempts = options.retryIdenticalPostOnce === true ? 2 : 1;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    let response;
+    let result;
+    try {
+      response = await fetchImpl(endpoint, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${oidc.value}`,
+          "Content-Type": "application/json",
+        },
+        body: bytes,
+        redirect: "error",
+        signal: AbortSignal.timeout(30_000),
+      });
+      result = await boundedJson(response, "NOTA_RESPONSE");
+    } catch (error) {
+      if (attempt + 1 < attempts) continue;
+      throw error;
+    }
+    if (!response.ok) {
+      const code =
+        typeof result.error === "string" &&
+        /^[A-Z0-9_]{1,80}$/.test(result.error)
+          ? result.error
+          : "NOTA_REQUEST_REJECTED";
+      fail(code);
+    }
+    return result;
   }
-  return result;
+  fail("NOTA_API_UNAVAILABLE");
 }
 
 async function main() {
   try {
-    process.stdout.write(`${JSON.stringify(await callNotaApi(process.argv[2]))}\n`);
+    process.stdout.write(
+      `${JSON.stringify(await callNotaApi(process.argv[2]))}\n`,
+    );
   } catch (error) {
-    const code = error instanceof NotaApiError ? error.code : "NOTA_API_UNAVAILABLE";
+    const code =
+      error instanceof NotaApiError ? error.code : "NOTA_API_UNAVAILABLE";
     process.stderr.write(`Nota attestation request failed: ${code}\n`);
     process.exitCode = 1;
   }
