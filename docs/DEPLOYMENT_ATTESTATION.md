@@ -60,7 +60,7 @@ Deployment, status, policy, suite, environment, or Vercel mutation:
 ```yaml
 jobs:
   validate:
-    uses: 0DFxinc/nota-github/.github/workflows/preflight.yml@41f94bf6c3af631fe1da6377facb256797abfc20
+    uses: 0DFxinc/nota-github/.github/workflows/preflight.yml@597db4220d09aefb94909814e5bb9f6e72362795
     with:
       policy-id: 00000000-0000-4000-8000-000000000000
       nota-environment: development
@@ -84,8 +84,9 @@ provider mutation is quarantined instead of blindly repeated.
 ## Fixed-origin smoke setup
 
 Create a `STATIC_SMOKE` policy for an exact HTTPS origin and an exact trigger
-and source ref. The policy must be informational and has the distinct Check
-name `Nota / Static Smoke v1`. It has no GitHub environment, secrets,
+and source ref. The policy must be informational. Each run uses a distinct
+Check name `Nota / Static Smoke v1 / <full-sha>` so it cannot become a stable
+required context. It has no GitHub environment, secrets,
 Deployment, marker, or artifact fields. Use
 [the static example](../examples/static-smoke.yml).
 

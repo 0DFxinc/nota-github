@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   nota-static-smoke:
-    uses: 0DFxinc/nota-github/.github/workflows/run-static-smoke.yml@41f94bf6c3af631fe1da6377facb256797abfc20
+    uses: 0DFxinc/nota-github/.github/workflows/run-static-smoke.yml@597db4220d09aefb94909814e5bb9f6e72362795
     with:
       policy-id: 00000000-0000-4000-8000-000000000000
       nota-environment: development
