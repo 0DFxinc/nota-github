@@ -1,8 +1,8 @@
 {
   "protocolVersion": 1,
-  "helperCommit": "36cd88d16d991d68e9a3f458ad94b62b3ee19ecf",
-  "helperTree": "d4e0ff7bc68828c71152054b624576c807b344e2",
-  "helperLockSha256": "7e65a6cacad78ef1836fd13bc2c5b69f9a893b4ad80e3164d89204ede64c0cb8",
+  "helperCommit": "250d4ca7ffb89998cf950ff5e17b7a5058a4a611",
+  "helperTree": "8a1ffc676c68b44cc199a3d7bc56d14778003097",
+  "helperLockSha256": "7a964e61a614c1a996087ab2a1b737a17c44433bbcab3bd16f062ae2e5c632ba",
   "contractSha256": "f6af5dd74c7f6fd4afd889c329c40e9afe57486a0a189ccff3cb410c10086434",
   "vercel": {
     "version": "58.11.0",

@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: 0DFxinc/nota-github
-          ref: 36cd88d16d991d68e9a3f458ad94b62b3ee19ecf
+          ref: 250d4ca7ffb89998cf950ff5e17b7a5058a4a611
           path: _nota_helper
           persist-credentials: false
       - name: Run informational static smoke

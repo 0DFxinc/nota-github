@@ -31,15 +31,15 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: 0DFxinc/nota-github
-          ref: 36cd88d16d991d68e9a3f458ad94b62b3ee19ecf
+          ref: 250d4ca7ffb89998cf950ff5e17b7a5058a4a611
           path: _nota_helper
           persist-credentials: false
       - name: Verify helper identity
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C "$GITHUB_WORKSPACE/_nota_helper" rev-parse HEAD)" = "36cd88d16d991d68e9a3f458ad94b62b3ee19ecf"
-          test "$(sha256sum "$GITHUB_WORKSPACE/_nota_helper/package-lock.json" | cut -d' ' -f1)" = "7e65a6cacad78ef1836fd13bc2c5b69f9a893b4ad80e3164d89204ede64c0cb8"
+          test "$(git -C "$GITHUB_WORKSPACE/_nota_helper" rev-parse HEAD)" = "250d4ca7ffb89998cf950ff5e17b7a5058a4a611"
+          test "$(sha256sum "$GITHUB_WORKSPACE/_nota_helper/package-lock.json" | cut -d' ' -f1)" = "7a964e61a614c1a996087ab2a1b737a17c44433bbcab3bd16f062ae2e5c632ba"
       - name: Run secret-free authority preflight
         shell: bash
         env:
@@ -75,7 +75,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: 0DFxinc/nota-github
-          ref: 36cd88d16d991d68e9a3f458ad94b62b3ee19ecf
+          ref: 250d4ca7ffb89998cf950ff5e17b7a5058a4a611
           path: _nota_helper
           persist-credentials: false
       - name: Revalidate authority before token use
