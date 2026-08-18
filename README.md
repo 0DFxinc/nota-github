@@ -1,4 +1,99 @@
-# Nota GitHub CI workflows
+# Nota + GitHub
+
+Two things Nota does inside GitHub, both on the Nota GitHub App:
+
+| | What it looks like | Setup |
+| --- | --- | --- |
+| **Ask Nota in a comment** | You comment `/nota create a test plan for this PR`; Nota replies in the thread. | [below](#ask-nota-in-a-comment) |
+| **Test gate** | Nota runs your suite against the pull request's deployment and gives the calling job the same conclusion. | [below](#test-gate-and-ci-workflows) |
+
+Install the App first: it is what lets Nota read the pull request, reply in the
+thread, and publish the check. Nota gives you the install link, which binds the
+installation to your Nota workspace, so use that link rather than the
+Marketplace page.
+
+---
+
+## Ask Nota in a comment
+
+### 1. Install the GitHub App
+
+An organization owner installs it and grants access to the repositories Nota
+should work in. Nota gives you the install link; it binds the installation to
+your Nota workspace, so use the link rather than installing from the
+Marketplace page.
+
+The App requests these repository permissions. Setup rejects a weaker grant
+rather than failing later inside a run:
+
+| Permission      | Access | Why                         |
+| --------------- | ------ | --------------------------- |
+| Issues          | Write  | Post the reply on an issue  |
+| Pull requests   | Write  | Post the reply on a PR      |
+| Contents        | Read   | Read the diff for context   |
+| Checks          | Write  | Publish the gate result     |
+| Deployments     | Read   | Know when a preview is live |
+| Actions         | Read   | Match a run to its workflow |
+| Commit statuses | Write  | Report status on a commit   |
+| Metadata        | Read   | Required by GitHub          |
+| Merge queues    | Read   | Support merge-queue gating  |
+
+### 2. Comment on an issue or a PR
+
+```text
+/nota create a test plan for this PR
+```
+
+Nota edits one comment in place: `Working on it…` first, then the result.
+
+Expect about a minute before work starts, plus the work itself. Discovery
+against a real app takes several minutes.
+
+**Every command needs the `/nota` prefix.** Replying in prose in the same thread
+is not picked up, including when you are answering a question Nota asked.
+
+**Name the area you want covered.** Nota matches what you write against the
+pages it knows about in your app, so the shortest path is to name the page as it
+appears in Nota:
+
+```text
+/nota create a test plan for the Cart page
+```
+
+If it cannot tell which area you mean, it asks; answer with another `/nota`
+comment. Two things save you that round-trip:
+
+- Nota takes the scope from your command text. It does not infer it from the
+  pull request's diff, so name the area explicitly even on a PR.
+- Use a word from the page's own title. `Cart flow` does find a page listed as
+  `Cart - Demo Shop`, but a synonym will not: `shopping basket` matches nothing
+  and Nota asks.
+
+### What comment commands do not do yet
+
+- **Inline review comments are not picked up.** Use a normal issue or PR
+  comment, not a comment on a specific line of the diff.
+- **Nota cannot comment on, assign, close or reopen an existing GitHub issue
+  from chat.** Creating one and reading them back are supported; the other
+  actions are not, and Nota will say so rather than approximating them with a
+  new issue.
+
+### What you can ask for in chat
+
+Once the App is installed, you can ask Nota to open a GitHub issue or read
+existing ones in any repository the installation covers, with no personal access
+token, and any member of the organization can ask, not only an admin:
+
+- "Open a GitHub issue in acme/web about the flaky guest-checkout run."
+- "What issues are open in acme/web?"
+
+Nota files the issue through the App installation, so it appears as the Nota
+app rather than as one of your users. A repository the App is not installed
+on is refused by name; add it to the installation to make it available.
+
+---
+
+# Test gate and CI workflows
 
 This public repository contains SHA-pinned reusable workflows for Nota's
 GitHub test gate, informational fixed-origin smoke testing, and first-class
@@ -177,6 +272,8 @@ Start with an informational policy. After a successful end-to-end canary,
 promote a pull-request or merge-queue policy to required in Nota and add its
 exact check context to the GitHub ruleset. The same reusable workflow supports
 both modes; GitHub enforcement is controlled by the Nota policy.
+
+---
 
 ## Security
 
